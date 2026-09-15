@@ -17,6 +17,9 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include <mutex>
+#include <miqutoolkit/core/string_utils.hpp>
+
 namespace fs = std::filesystem;
 
 namespace miqusecure {
@@ -37,10 +40,7 @@ static std::string run_cmd_capture(const std::string& cmd) {
 }
 
 static std::string trim(const std::string& str) {
-    size_t first = str.find_first_not_of(" \t\n\r");
-    if (first == std::string::npos) return "";
-    size_t last = str.find_last_not_of(" \t\n\r");
-    return str.substr(first, (last - first + 1));
+    return miqu::StringUtils::trim(str);
 }
 
 std::string SecurityBackend::get_active_connection() {
@@ -763,6 +763,7 @@ static std::string resolve_host_cached(const std::string& ip) {
     return ip;
 }
 
+static std::mutex s_traffic_mutex;
 static std::deque<NetworkConnection> s_recent_requests;
 static std::unordered_set<std::string> s_prev_conn_ids;
 static uint64_t s_prev_rx_bytes = 0;
@@ -770,6 +771,7 @@ static uint64_t s_prev_tx_bytes = 0;
 static std::chrono::steady_clock::time_point s_prev_rate_time = std::chrono::steady_clock::now();
 
 TrafficReport SecurityBackend::read_traffic() {
+    std::lock_guard<std::mutex> lock(s_traffic_mutex);
     TrafficReport report;
 
     // 1. Calculate bandwidth rate from /proc/net/dev
