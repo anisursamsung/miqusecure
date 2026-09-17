@@ -157,92 +157,158 @@ void DnsView::rebuild_profiles_list() {
     if (!m_profiles_container) return;
     m_profiles_container->clear_views();
 
-    struct ProfileDef {
-        std::string name;
-        std::string key_id;
-        std::string desc;
-        std::string p_ip;
-        std::string s_ip;
-    };
-
-    std::vector<ProfileDef> profiles = {
-        {"Quad9 (Recommended)", "Quad9", "Automated threat & phishing protection. Swiss non-profit with zero logging.", "9.9.9.9", "149.112.112.112"},
-        {"Cloudflare 1.1.1.1", "Cloudflare", "Fastest worldwide response times. Regular independent privacy audits.", "1.1.1.1", "1.0.0.1"},
-        {"Mullvad DNS", "Mullvad", "Strict Swedish privacy jurisdiction. Zero logs, DNSSEC and QNAME minimization.", "194.242.2.4", "194.242.2.5"},
-        {"AdGuard DNS", "AdGuard", "Built-in ad, tracking script, and telemetry domain blocker.", "94.140.14.14", "94.140.15.15"}
-    };
-
     auto unified_card = std::make_shared<CardView>();
-    unified_card->set_padding(14, 6);
+    unified_card->set_padding(14, 12);
     unified_card->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     unified_card->set_margin(0, 0, 0, 16);
 
-    auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    list_col->set_layout_params(LayoutParams(
+    auto card_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    card_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
 
-    for (size_t i = 0; i < profiles.size(); ++i) {
-        const auto& prof = profiles[i];
-        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-        row->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent),
-            Gravity::CenterVertical
-        ));
-        row->set_margin(4, 6, 4, 6);
+    // Top row: Title on left, Spinner on right
+    auto header_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    header_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
 
-        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-        col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+    auto title_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    title_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
-        auto name_tv = TextViewBuilder::create()->text(prof.name)->bold(true)->build();
-        auto desc_tv = TextViewBuilder::create()->text(prof.desc + " (" + prof.p_ip + ")")->caption()->muted()->multiline(true)->maxLines(2)->ellipsize(true)->build();
+    auto t_tv = TextViewBuilder::create()
+        ->text("Active DNS Resolver")
+        ->bold(true)
+        ->build();
+    auto s_tv = TextViewBuilder::create()
+        ->text("Select secure resolver or network default")
+        ->caption()
+        ->muted()
+        ->build();
+    title_col->add_view(t_tv);
+    title_col->add_view(s_tv);
+    header_row->add_view(title_col);
 
-        col->add_view(name_tv);
-        col->add_view(desc_tv);
-        row->add_view(col);
+    std::vector<std::string> dns_items = {
+        "🛡️ Quad9 (Threat Block)",
+        "⚡ Cloudflare 1.1.1.1",
+        "🔒 Mullvad Privacy",
+        "🚫 AdGuard Ad-Block",
+        "📡 Router Default (ISP)"
+    };
 
-        bool is_active = (m_info.active_provider.find(prof.key_id) != std::string::npos);
-        std::string p1 = prof.p_ip;
-        std::string p2 = prof.s_ip;
+    m_spinner_dns = SpinnerBuilder::create()
+        ->items(dns_items)
+        ->selectedIndex(get_profile_index(m_info))
+        ->padding(12, 8)
+        ->onItemSelected([this](int idx, const std::string&) {
+            if (m_updating_ui) return;
+            update_profile_descriptions(idx);
 
-        auto sw = SwitchBuilder::create()
-            ->checked(is_active)
-            ->build();
-        std::weak_ptr<Switch> weak_sw = sw;
-        sw->set_on_checked_changed_listener([this, p1, p2, weak_sw](bool checked) {
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
             if (m_status_desc) m_status_desc->set_text("Configuring DNS resolvers and applying changes...");
-            std::thread([this, p1, p2, checked, weak_sw]() {
-                bool ok = checked ? SecurityBackend::apply_dns(p1, p2) : SecurityBackend::restore_default_dns();
+
+            std::thread([this, idx]() {
+                bool ok = false;
+                if (idx == 0) ok = SecurityBackend::apply_dns("9.9.9.9", "149.112.112.112");
+                else if (idx == 1) ok = SecurityBackend::apply_dns("1.1.1.1", "1.0.0.1");
+                else if (idx == 2) ok = SecurityBackend::apply_dns("194.242.2.4", "194.242.2.5");
+                else if (idx == 3) ok = SecurityBackend::apply_dns("94.140.14.14", "94.140.15.15");
+                else ok = SecurityBackend::restore_default_dns();
+
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, checked, ok, weak_sw]() {
+                    engine->post([this, ok]() {
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok) {
                             if (m_on_changed) m_on_changed();
                         } else {
-                            if (auto s = weak_sw.lock()) {
-                                s->set_checked(!checked);
+                            m_updating_ui = true;
+                            if (m_spinner_dns) {
+                                m_spinner_dns->set_selected_index(get_profile_index(m_info));
                             }
+                            update_profile_descriptions(get_profile_index(m_info));
+                            m_updating_ui = false;
                         }
                     });
                 }
             }).detach();
-        });
-        row->add_view(sw);
+        })
+        ->build();
 
-        list_col->add_view(row);
-        if (i + 1 < profiles.size()) {
-            list_col->add_view(DividerViewBuilder::create()->margin(0, 4)->build());
-        }
-    }
+    m_spinner_dns->set_layout_params(LayoutParams(
+        270,
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    header_row->add_view(m_spinner_dns);
+    card_col->add_view(header_row);
 
-    unified_card->add_view(list_col);
+    // Divider
+    card_col->add_view(DividerViewBuilder::create()->margin(0, 10)->build());
+
+    // Description & Technical details container
+    m_profile_desc = TextViewBuilder::create()
+        ->text("")
+        ->caption()
+        ->multiline(true)
+        ->build();
+    m_profile_desc->set_margin(0, 0, 0, 4);
+
+    m_profile_tech_desc = TextViewBuilder::create()
+        ->text("")
+        ->caption()
+        ->muted()
+        ->ellipsize(true)
+        ->build();
+
+    card_col->add_view(m_profile_desc);
+    card_col->add_view(m_profile_tech_desc);
+
+    update_profile_descriptions(get_profile_index(m_info));
+
+    unified_card->add_view(card_col);
     m_profiles_container->add_view(unified_card);
+}
+
+void DnsView::update_profile_descriptions(int idx) {
+    if (!m_profile_desc || !m_profile_tech_desc) return;
+
+    switch (idx) {
+        case 0:
+            m_profile_desc->set_text("Automated threat & phishing protection. Swiss non-profit with zero logging policy.");
+            m_profile_tech_desc->set_text("⚙ Primary: 9.9.9.9 • Secondary: 149.112.112.112 • DNSSEC validated");
+            break;
+        case 1:
+            m_profile_desc->set_text("Fastest worldwide response times with regular independent public privacy audits.");
+            m_profile_tech_desc->set_text("⚙ Primary: 1.1.1.1 • Secondary: 1.0.0.1 • Anycast network");
+            break;
+        case 2:
+            m_profile_desc->set_text("Strict Swedish privacy jurisdiction with zero logs, DNSSEC, and QNAME minimization.");
+            m_profile_tech_desc->set_text("⚙ Primary: 194.242.2.4 • Secondary: 194.242.2.5 • No telemetry");
+            break;
+        case 3:
+            m_profile_desc->set_text("Built-in network-level blocking of ad servers, tracking scripts, and telemetry domains.");
+            m_profile_tech_desc->set_text("⚙ Primary: 94.140.14.14 • Secondary: 94.140.15.15 • Filtered");
+            break;
+        case 4:
+        default:
+            m_profile_desc->set_text("Standard unencrypted DNS provided by your local Wi-Fi router or ISP DHCP server.");
+            m_profile_tech_desc->set_text("⚙ ISP Default • Queries may be logged by network operator");
+            break;
+    }
+}
+
+int DnsView::get_profile_index(const DnsInfo& info) {
+    if (info.active_provider.find("Quad9") != std::string::npos) return 0;
+    if (info.active_provider.find("Cloudflare") != std::string::npos) return 1;
+    if (info.active_provider.find("Mullvad") != std::string::npos) return 2;
+    if (info.active_provider.find("AdGuard") != std::string::npos) return 3;
+    return 4; // Router Default
 }
 
 void DnsView::update_info(const DnsInfo& info) {
@@ -266,7 +332,12 @@ void DnsView::update_info(const DnsInfo& info) {
         m_conn_lbl->set_text(conn_str);
     }
 
-    rebuild_profiles_list();
+    m_updating_ui = true;
+    if (m_spinner_dns) {
+        m_spinner_dns->set_selected_index(get_profile_index(m_info));
+    }
+    update_profile_descriptions(get_profile_index(m_info));
+    m_updating_ui = false;
 }
 
 } // namespace miqusecure
