@@ -28,10 +28,14 @@ private:
     // Network modes container
     std::shared_ptr<miqu::TextView> m_network_lbl;
     std::shared_ptr<miqu::LinearLayout> m_modes_container;
-    std::shared_ptr<miqu::Switch> m_switch_mode_home;
-    std::shared_ptr<miqu::Switch> m_switch_mode_hotspot;
-    std::shared_ptr<miqu::Switch> m_switch_mode_public;
-    std::shared_ptr<miqu::Switch> m_switch_mode_lockdown;
+    std::shared_ptr<miqu::Spinner> m_spinner_mode;
+    std::shared_ptr<miqu::TextView> m_mode_desc;
+    std::shared_ptr<miqu::TextView> m_mode_tech_desc;
+    bool m_updating_ui = false;
+
+    void update_mode_descriptions(NetworkMode mode);
+    static int mode_to_index(NetworkMode mode);
+    static NetworkMode index_to_mode(int index);
 
     // Service switches
     std::shared_ptr<miqu::Switch> m_switch_ssh;

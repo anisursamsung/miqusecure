@@ -18,8 +18,15 @@ private:
     void rebuild_active_connections();
     void rebuild_recent_feed();
 
+    enum class TrafficScopeMode {
+        InternetOnly = 0,
+        All = 1,
+        LocalOnly = 2,
+        EncryptedOnly = 3
+    };
+
     TrafficReport m_traffic;
-    bool m_internet_only = true;
+    TrafficScopeMode m_scope_mode = TrafficScopeMode::InternetOnly;
     std::string m_search_filter;
 
     std::shared_ptr<miqu::LinearLayout> m_layout;
@@ -30,7 +37,7 @@ private:
 
     std::shared_ptr<miqu::LinearLayout> m_feed_container;
     std::shared_ptr<miqu::LinearLayout> m_conn_container;
-    std::shared_ptr<miqu::Button> m_btn_scope;
+    std::shared_ptr<miqu::Spinner> m_spinner_scope;
     std::shared_ptr<miqu::EditText> m_search_input;
 };
 

@@ -439,127 +439,161 @@ void FirewallView::rebuild_modes_list() {
     m_modes_container->clear_views();
 
     auto card = std::make_shared<CardView>();
-    card->set_padding(14, 6);
+    card->set_padding(14, 12);
     card->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
 
-    auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    list_col->set_layout_params(LayoutParams(
+    auto card_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    card_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
 
-    struct ModeItem {
-        std::string icon;
-        std::string title;
-        std::string friendly_desc;
-        std::string pro_tech_desc;
-        NetworkMode mode;
-        std::shared_ptr<Switch>* switch_ptr;
+    // Top row: Label on left, Spinner on right
+    auto header_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    header_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+
+    auto title_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    title_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+
+    auto t_tv = TextViewBuilder::create()
+        ->text("Active Protection Profile")
+        ->bold(true)
+        ->build();
+    auto s_tv = TextViewBuilder::create()
+        ->text("Select network security policy preset")
+        ->caption()
+        ->muted()
+        ->build();
+    title_col->add_view(t_tv);
+    title_col->add_view(s_tv);
+    header_row->add_view(title_col);
+
+    std::vector<std::string> mode_items = {
+        "🏠 Home Wi-Fi (Trusted)",
+        "📱 Mobile Hotspot (Data-Saver)",
+        "☕ Public Wi-Fi (Stealth)",
+        "🔒 Extreme Lockdown (Isolated)"
     };
 
-    std::vector<ModeItem> items = {
-        {
-            "🏠",
-            "Home Wi-Fi (Trusted)",
-            "Optimized for home or trusted private networks. Shields the computer from internet intrusions while keeping printers and local devices accessible.",
-            "ufw: deny in, allow out | metered: no | LAN discovery & local services allowed",
-            NetworkMode::Home,
-            &m_switch_mode_home
-        },
-        {
-            "📱",
-            "Mobile Hotspot (Data-Saver)",
-            "Optimized when tethered to mobile 4G/5G hotspots. Drops incoming scan probes and pauses background updates to conserve mobile data.",
-            "ufw: reject in | nmcli: connection.metered yes | pauses system & flatpak background sync",
-            NetworkMode::MobileHotspot,
-            &m_switch_mode_hotspot
-        },
-        {
-            "☕",
-            "Public Wi-Fi (Stealth)",
-            "Optimized for coffee shops, airports, and hotels. Makes the computer invisible to network scanners, ignores ping probes, and rejects untrusted inbound scans.",
-            "ufw: reject in | ICMP scan drops | mDNS/UPnP discovery suppressed",
-            NetworkMode::PublicWifi,
-            &m_switch_mode_public
-        },
-        {
-            "🔒",
-            "Extreme Lockdown (Isolated)",
-            "Maximum isolation for hostile or suspicious networks. Shuts down all local listening ports and blocks all incoming connections unconditionally.",
-            "ufw: reject in | local ports (22, 8080, 22000) forced closed | zero inbound exposure",
-            NetworkMode::Lockdown,
-            &m_switch_mode_lockdown
-        }
-    };
+    m_spinner_mode = SpinnerBuilder::create()
+        ->items(mode_items)
+        ->selectedIndex(mode_to_index(m_info.current_mode))
+        ->padding(12, 8)
+        ->onItemSelected([this](int idx, const std::string&) {
+            if (m_updating_ui) return;
+            NetworkMode target_mode = index_to_mode(idx);
+            update_mode_descriptions(target_mode);
 
-    for (size_t i = 0; i < items.size(); ++i) {
-        const auto& item = items[i];
-        bool is_active = (m_info.current_mode == item.mode);
-
-        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-        row->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent),
-            Gravity::CenterVertical
-        ));
-        row->set_margin(4, 6, 4, 6);
-
-        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-        col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
-
-        std::string title_text = item.icon + " " + item.title + (is_active ? "  ● Active" : "");
-        auto t_tv = TextViewBuilder::create()->text(title_text)->bold(true)->build();
-        auto d_tv = TextViewBuilder::create()->text(item.friendly_desc)->caption()->multiline(true)->maxLines(2)->ellipsize(true)->build();
-        d_tv->set_margin(0, 2, 0, 2);
-
-        // Technical / Pro command line (sleek single line, ellipsized on narrow screens)
-        auto p_tv = TextViewBuilder::create()->text("⚙ " + item.pro_tech_desc)->caption()->muted()->ellipsize(true)->build();
-
-        col->add_view(t_tv);
-        col->add_view(d_tv);
-        col->add_view(p_tv);
-        row->add_view(col);
-
-        auto sw = SwitchBuilder::create()
-            ->checked(is_active)
-            ->build();
-        std::weak_ptr<Switch> weak_sw = sw;
-        NetworkMode target_mode = item.mode;
-        sw->set_on_checked_changed_listener([this, target_mode, weak_sw](bool checked) {
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
             if (m_status_desc) m_status_desc->set_text("Applying network protection preset...");
-            NetworkMode next_mode = checked ? target_mode : NetworkMode::Home;
-            std::thread([this, next_mode, checked, weak_sw]() {
-                bool ok = SecurityBackend::set_network_mode(next_mode);
+
+            std::thread([this, target_mode]() {
+                bool ok = SecurityBackend::set_network_mode(target_mode);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, checked, ok, weak_sw]() {
+                    engine->post([this, ok]() {
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok) {
                             if (m_on_changed) m_on_changed();
                         } else {
-                            if (auto s = weak_sw.lock()) {
-                                s->set_checked(!checked);
+                            m_updating_ui = true;
+                            if (m_spinner_mode) {
+                                m_spinner_mode->set_selected_index(mode_to_index(m_info.current_mode));
                             }
+                            update_mode_descriptions(m_info.current_mode);
+                            m_updating_ui = false;
                         }
                     });
                 }
             }).detach();
-        });
+        })
+        ->build();
 
-        *(item.switch_ptr) = sw;
-        row->add_view(sw);
+    m_spinner_mode->set_layout_params(LayoutParams(
+        270,
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    header_row->add_view(m_spinner_mode);
+    card_col->add_view(header_row);
 
-        list_col->add_view(row);
-        if (i + 1 < items.size()) {
-            list_col->add_view(DividerViewBuilder::create()->margin(0, 4)->build());
-        }
-    }
+    // Divider
+    card_col->add_view(DividerViewBuilder::create()->margin(0, 10)->build());
 
-    card->add_view(list_col);
+    // Description & Technical details container
+    m_mode_desc = TextViewBuilder::create()
+        ->text("")
+        ->caption()
+        ->multiline(true)
+        ->build();
+    m_mode_desc->set_margin(0, 0, 0, 4);
+
+    m_mode_tech_desc = TextViewBuilder::create()
+        ->text("")
+        ->caption()
+        ->muted()
+        ->ellipsize(true)
+        ->build();
+
+    card_col->add_view(m_mode_desc);
+    card_col->add_view(m_mode_tech_desc);
+
+    update_mode_descriptions(m_info.current_mode);
+
+    card->add_view(card_col);
     m_modes_container->add_view(card);
+}
+
+void FirewallView::update_mode_descriptions(NetworkMode mode) {
+    if (!m_mode_desc || !m_mode_tech_desc) return;
+
+    switch (mode) {
+        case NetworkMode::Home:
+            m_mode_desc->set_text("Optimized for home or trusted private networks. Shields the computer from internet intrusions while keeping printers and local devices accessible.");
+            m_mode_tech_desc->set_text("⚙ ufw: deny in, allow out | metered: no | LAN discovery & local services allowed");
+            break;
+        case NetworkMode::MobileHotspot:
+            m_mode_desc->set_text("Optimized when tethered to mobile 4G/5G hotspots. Drops incoming scan probes and pauses background updates to conserve mobile data.");
+            m_mode_tech_desc->set_text("⚙ ufw: reject in | nmcli: connection.metered yes | pauses system & flatpak background sync");
+            break;
+        case NetworkMode::PublicWifi:
+            m_mode_desc->set_text("Optimized for coffee shops, airports, and hotels. Makes the computer invisible to network scanners, ignores ping probes, and rejects untrusted inbound scans.");
+            m_mode_tech_desc->set_text("⚙ ufw: reject in | ICMP scan drops | mDNS/UPnP discovery suppressed");
+            break;
+        case NetworkMode::Lockdown:
+            m_mode_desc->set_text("Maximum isolation for hostile or suspicious networks. Shuts down all local listening ports and blocks all incoming connections unconditionally.");
+            m_mode_tech_desc->set_text("⚙ ufw: reject in | local ports (22, 8080, 22000) forced closed | zero inbound exposure");
+            break;
+        default:
+            m_mode_desc->set_text("Custom user-configured firewall policy.");
+            m_mode_tech_desc->set_text("⚙ manual port and routing rules applied");
+            break;
+    }
+}
+
+int FirewallView::mode_to_index(NetworkMode mode) {
+    switch (mode) {
+        case NetworkMode::Home: return 0;
+        case NetworkMode::MobileHotspot: return 1;
+        case NetworkMode::PublicWifi: return 2;
+        case NetworkMode::Lockdown: return 3;
+        default: return 0;
+    }
+}
+
+NetworkMode FirewallView::index_to_mode(int index) {
+    switch (index) {
+        case 0: return NetworkMode::Home;
+        case 1: return NetworkMode::MobileHotspot;
+        case 2: return NetworkMode::PublicWifi;
+        case 3: return NetworkMode::Lockdown;
+        default: return NetworkMode::Home;
+    }
 }
 
 void FirewallView::update_info(const FirewallInfo& info) {
@@ -587,7 +621,12 @@ void FirewallView::update_info(const FirewallInfo& info) {
         m_network_lbl->set_text(net_str);
     }
 
-    rebuild_modes_list();
+    m_updating_ui = true;
+    if (m_spinner_mode) {
+        m_spinner_mode->set_selected_index(mode_to_index(m_info.current_mode));
+    }
+    update_mode_descriptions(m_info.current_mode);
+    m_updating_ui = false;
 
     if (m_switch_ssh) {
         m_switch_ssh->set_checked(m_info.ssh_allowed);

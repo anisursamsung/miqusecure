@@ -102,21 +102,28 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         Gravity::CenterVertical
     ));
 
-    m_btn_scope = ButtonBuilder::create()
-        ->text("🌐 Internet Only (Hide 127.0.0.1)")
-        ->flat(true)
-        ->bold(true)
+    std::vector<std::string> scope_items = {
+        "🌐 Internet Only",
+        "🔍 All Traffic (inc. Local)",
+        "💻 Localhost Only",
+        "🛡️ Encrypted Only (TLS)"
+    };
+
+    m_spinner_scope = SpinnerBuilder::create()
+        ->items(scope_items)
+        ->selectedIndex(static_cast<int>(m_scope_mode))
         ->padding(10, 6)
-        ->onClick([this]() {
-            m_internet_only = !m_internet_only;
-            if (m_btn_scope) {
-                m_btn_scope->set_text(m_internet_only ? "🌐 Internet Only (Hide 127.0.0.1)" : "🔍 All Traffic (inc. Local)");
-            }
+        ->onItemSelected([this](int idx, const std::string&) {
+            m_scope_mode = static_cast<TrafficScopeMode>(idx);
             rebuild_active_connections();
         })
         ->build();
-    m_btn_scope->set_margin(0, 0, 10, 0);
-    filter_row->add_view(m_btn_scope);
+    m_spinner_scope->set_layout_params(LayoutParams(
+        230,
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    m_spinner_scope->set_margin(0, 0, 10, 0);
+    filter_row->add_view(m_spinner_scope);
 
     m_search_input = std::make_shared<EditText>();
     m_search_input->set_hint("Filter by app, domain, or IP...");
@@ -339,7 +346,11 @@ void TrafficView::rebuild_active_connections() {
 
     std::vector<NetworkConnection> filtered;
     for (const auto& conn : m_traffic.active_connections) {
-        if (m_internet_only && conn.is_loopback) {
+        if (m_scope_mode == TrafficScopeMode::InternetOnly && conn.is_loopback) {
+            continue;
+        } else if (m_scope_mode == TrafficScopeMode::LocalOnly && !conn.is_loopback) {
+            continue;
+        } else if (m_scope_mode == TrafficScopeMode::EncryptedOnly && !conn.is_encrypted) {
             continue;
         }
 
@@ -362,8 +373,24 @@ void TrafficView::rebuild_active_connections() {
     }
 
     if (filtered.empty()) {
+        std::string empty_msg;
+        switch (m_scope_mode) {
+            case TrafficScopeMode::InternetOnly:
+                empty_msg = "No active outbound internet connections matching filter.";
+                break;
+            case TrafficScopeMode::LocalOnly:
+                empty_msg = "No active localhost/loopback connections matching filter.";
+                break;
+            case TrafficScopeMode::EncryptedOnly:
+                empty_msg = "No encrypted TLS connections matching filter.";
+                break;
+            case TrafficScopeMode::All:
+            default:
+                empty_msg = "No active network sockets detected.";
+                break;
+        }
         auto empty_tv = TextViewBuilder::create()
-            ->text(m_internet_only ? "No active outbound internet connections matching filter." : "No active network sockets detected.")
+            ->text(empty_msg)
             ->caption()
             ->muted()
             ->build();
