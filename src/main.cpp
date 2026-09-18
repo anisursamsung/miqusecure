@@ -212,17 +212,20 @@ int main(int argc, char** argv) {
         ->addItem("Testbed", "🧪")
         ->selectedIndex(0)
         ->pillSize(44, 26)
-        ->showDivider(true)
-        ->barHeight(58)
+        ->cornerRadius(24)
+        ->barHeight(56)
+        ->itemWidth(68)
+        ->showDivider(false)
         ->onItemSelected([&](int idx) {
             if (pager) pager->set_current_page(idx);
         })
         ->build();
     bottom_nav->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        58
+        static_cast<int>(LayoutDimension::WrapContent),
+        56,
+        Gravity::CenterHorizontal
     ));
-    bottom_nav->set_margin(0, 0, 0, 0);
+    bottom_nav->set_margin(12, 6, 12, 12);
     root_container->add_view(bottom_nav);
 
 
