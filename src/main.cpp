@@ -136,8 +136,9 @@ int main(int argc, char** argv) {
         ->subtitle(SECTION_SUBTITLES[0])
         ->titleAlignment(TitleAlignment::Center)
         ->onRefresh(refresh_fn)
-        ->onClose([engine]() {
-            engine->quit();
+        ->onClose([&window, engine]() {
+            if (window) window->request_close();
+            else engine->quit();
         })
         ->build();
     toolbar->set_margin(14, 12, 14, 8);
