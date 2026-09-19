@@ -39,6 +39,7 @@ struct FirewallInfo {
     bool ssh_allowed = false;
     bool web_dev_allowed = false;
     bool syncthing_allowed = false;
+    bool samba_allowed = false;
     std::vector<FirewallRule> rules;
     std::vector<std::string> recent_blocks;
 };
@@ -77,11 +78,17 @@ struct CleanableFile {
     std::string type;
 };
 
-struct MetadataInfo {
+struct CleanerInfo {
     bool mat2_installed = false;
     std::string version = "";
+    std::string thumbnails_size = "0 B";
+    std::string browser_cache_size = "0 B";
+    std::string trash_size = "0 B";
+    std::string bash_history_size = "0 B";
     std::vector<CleanableFile> recent_files;
 };
+
+using MetadataInfo = CleanerInfo;
 
 struct HardwareInfo {
     bool wifi_enabled = true;
@@ -150,7 +157,8 @@ public:
     static DnsInfo read_dns();
     static HardwareInfo read_hardware();
     static LsmInfo read_lsm();
-    static MetadataInfo read_metadata();
+    static CleanerInfo read_cleaner();
+    static MetadataInfo read_metadata() { return read_cleaner(); }
     static TrafficReport read_traffic();
     static DistroboxInfo read_testbed();
 
@@ -185,8 +193,13 @@ public:
     static bool apply_dns(const std::string& primary_ip, const std::string& secondary_ip);
     static bool restore_default_dns();
 
-    // Metadata cleaning & scanning
+    // Metadata & BleachBit Cache Cleaning
     static bool clean_metadata(const std::string& filepath, std::string& output_log);
+    static bool clean_thumbnails(std::string& output_log);
+    static bool clean_browser_caches(std::string& output_log);
+    static bool clean_trash_and_temp(std::string& output_log);
+    static bool clean_shell_history(std::string& output_log);
+    static bool clean_all_caches(std::string& output_log);
     static std::vector<CleanableFile> scan_recent_cleanable_files();
 
 private:

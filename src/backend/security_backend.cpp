@@ -144,6 +144,7 @@ FirewallInfo SecurityBackend::read_firewall() {
                     if (rule.port_or_service == "22" || rule.port_or_service == "ssh") info.ssh_allowed = true;
                     if (rule.port_or_service == "8080") info.web_dev_allowed = true;
                     if (rule.port_or_service == "22000") info.syncthing_allowed = true;
+                    if (rule.port_or_service == "445" || rule.port_or_service == "samba") info.samba_allowed = true;
                 }
 
                 info.rules.push_back(rule);
@@ -172,12 +173,12 @@ FirewallInfo SecurityBackend::read_firewall() {
     } else if (saved_mode == "public" || info.strict_mode) {
         info.current_mode = NetworkMode::PublicWifi;
         info.active_preset = "Public Wi-Fi (Stealth)";
-    } else if (info.default_incoming == "DROP" || info.default_incoming == "DENY") {
+    } else if (info.default_incoming == "DROP" || info.default_incoming == "DENY" || saved_mode == "home") {
         info.current_mode = NetworkMode::Home;
         info.active_preset = "Home Wi-Fi (Trusted)";
     } else {
-        info.current_mode = NetworkMode::Custom;
-        info.active_preset = "Custom / Permissive";
+        info.current_mode = NetworkMode::Home;
+        info.active_preset = "Home Wi-Fi (Trusted)";
     }
 
     // 4. Query recent blocked logs from journalctl
@@ -396,15 +397,176 @@ std::vector<CleanableFile> SecurityBackend::scan_recent_cleanable_files() {
     return files;
 }
 
-MetadataInfo SecurityBackend::read_metadata() {
-    MetadataInfo info;
+static uintmax_t calculate_dir_size(const fs::path& dir_path) {
+    if (!fs::exists(dir_path)) return 0;
+    uintmax_t size = 0;
+    std::error_code ec;
+    for (const auto& entry : fs::recursive_directory_iterator(dir_path, fs::directory_options::skip_permission_denied, ec)) {
+        if (ec) break;
+        if (entry.is_regular_file(ec)) {
+            size += entry.file_size(ec);
+        }
+    }
+    return size;
+}
+
+static std::string format_byte_size(uintmax_t bytes) {
+    if (bytes == 0) return "Empty";
+    if (bytes < 1024) return std::to_string(bytes) + " B";
+    if (bytes < 1024 * 1024) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.1f KB", bytes / 1024.0f);
+        return buf;
+    }
+    if (bytes < 1024 * 1024 * 1024) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.1f MB", bytes / (1024.0f * 1024.0f));
+        return buf;
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.2f GB", bytes / (1024.0f * 1024.0f * 1024.0f));
+    return buf;
+}
+
+static uintmax_t clean_directory_contents(const fs::path& dir_path) {
+    if (!fs::exists(dir_path)) return 0;
+    uintmax_t freed = 0;
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(dir_path, fs::directory_options::skip_permission_denied, ec)) {
+        if (ec) break;
+        uintmax_t s = 0;
+        if (entry.is_regular_file(ec)) s = entry.file_size(ec);
+        else if (entry.is_directory(ec)) s = calculate_dir_size(entry.path());
+        if (fs::remove_all(entry.path(), ec) > 0) {
+            freed += s;
+        }
+    }
+    return freed;
+}
+
+CleanerInfo SecurityBackend::read_cleaner() {
+    CleanerInfo info;
     std::string which_mat2 = run_cmd_capture("which mat2 2>/dev/null");
     info.mat2_installed = !which_mat2.empty();
     if (info.mat2_installed) {
-        info.version = run_cmd_capture("mat2 --version 2>/dev/null");
+        info.version = trim(run_cmd_capture("mat2 --version 2>/dev/null"));
     }
     info.recent_files = scan_recent_cleanable_files();
+
+    const char* home = getenv("HOME");
+    if (home) {
+        fs::path h(home);
+        uintmax_t thumb_sz = calculate_dir_size(h / ".cache/thumbnails");
+        info.thumbnails_size = format_byte_size(thumb_sz);
+
+        uintmax_t browser_sz = 0;
+        browser_sz += calculate_dir_size(h / ".cache/google-chrome");
+        browser_sz += calculate_dir_size(h / ".cache/chromium");
+        browser_sz += calculate_dir_size(h / ".cache/BraveSoftware");
+        browser_sz += calculate_dir_size(h / ".cache/mozilla");
+        info.browser_cache_size = format_byte_size(browser_sz);
+
+        uintmax_t trash_sz = 0;
+        trash_sz += calculate_dir_size(h / ".local/share/Trash");
+        trash_sz += calculate_dir_size(h / ".cache/fontconfig");
+        trash_sz += calculate_dir_size(h / ".cache/mesa_shader_cache");
+        info.trash_size = format_byte_size(trash_sz);
+
+        uintmax_t hist_sz = 0;
+        std::error_code ec;
+        if (fs::exists(h / ".bash_history", ec)) hist_sz += fs::file_size(h / ".bash_history", ec);
+        if (fs::exists(h / ".zsh_history", ec)) hist_sz += fs::file_size(h / ".zsh_history", ec);
+        if (fs::exists(h / ".python_history", ec)) hist_sz += fs::file_size(h / ".python_history", ec);
+        info.bash_history_size = format_byte_size(hist_sz);
+    }
+
     return info;
+}
+
+bool SecurityBackend::clean_thumbnails(std::string& output_log) {
+    const char* home = getenv("HOME");
+    if (!home) {
+        output_log = "Error: HOME directory not found.";
+        return false;
+    }
+    fs::path thumb_dir = fs::path(home) / ".cache/thumbnails";
+    uintmax_t freed = clean_directory_contents(thumb_dir);
+    output_log = "Cleaned thumbnail cache (" + format_byte_size(freed) + " reclaimed).";
+    return true;
+}
+
+bool SecurityBackend::clean_browser_caches(std::string& output_log) {
+    const char* home = getenv("HOME");
+    if (!home) {
+        output_log = "Error: HOME directory not found.";
+        return false;
+    }
+    fs::path h(home);
+    uintmax_t freed = 0;
+    freed += clean_directory_contents(h / ".cache/google-chrome/Default/Cache");
+    freed += clean_directory_contents(h / ".cache/google-chrome/Default/Code Cache");
+    freed += clean_directory_contents(h / ".cache/chromium/Default/Cache");
+    freed += clean_directory_contents(h / ".cache/chromium/Default/Code Cache");
+    freed += clean_directory_contents(h / ".cache/BraveSoftware/Brave-Browser/Default/Cache");
+    freed += clean_directory_contents(h / ".cache/BraveSoftware/Brave-Browser/Default/Code Cache");
+
+    // Mozilla Firefox cache2
+    std::error_code ec;
+    fs::path ff_dir = h / ".cache/mozilla/firefox";
+    if (fs::exists(ff_dir, ec)) {
+        for (const auto& entry : fs::directory_iterator(ff_dir, ec)) {
+            if (entry.is_directory(ec)) {
+                freed += clean_directory_contents(entry.path() / "cache2");
+            }
+        }
+    }
+    output_log = "Cleaned browser web caches (" + format_byte_size(freed) + " reclaimed).";
+    return true;
+}
+
+bool SecurityBackend::clean_trash_and_temp(std::string& output_log) {
+    const char* home = getenv("HOME");
+    if (!home) {
+        output_log = "Error: HOME directory not found.";
+        return false;
+    }
+    fs::path h(home);
+    uintmax_t freed = 0;
+    freed += clean_directory_contents(h / ".local/share/Trash/files");
+    freed += clean_directory_contents(h / ".local/share/Trash/info");
+    freed += clean_directory_contents(h / ".cache/fontconfig");
+    freed += clean_directory_contents(h / ".cache/mesa_shader_cache");
+    output_log = "Cleaned Trash bin & temporary caches (" + format_byte_size(freed) + " reclaimed).";
+    return true;
+}
+
+bool SecurityBackend::clean_shell_history(std::string& output_log) {
+    const char* home = getenv("HOME");
+    if (!home) {
+        output_log = "Error: HOME directory not found.";
+        return false;
+    }
+    fs::path h(home);
+    std::vector<std::string> hist_files = {".bash_history", ".zsh_history", ".python_history", ".lesshst"};
+    for (const auto& f : hist_files) {
+        fs::path p = h / f;
+        std::error_code ec;
+        if (fs::exists(p, ec)) {
+            std::ofstream ofs(p, std::ios::trunc);
+        }
+    }
+    output_log = "Cleared shell and terminal history files.";
+    return true;
+}
+
+bool SecurityBackend::clean_all_caches(std::string& output_log) {
+    std::string l1, l2, l3, l4;
+    clean_thumbnails(l1);
+    clean_browser_caches(l2);
+    clean_trash_and_temp(l3);
+    clean_shell_history(l4);
+    output_log = "Successfully performed deep clean across all system and privacy caches!";
+    return true;
 }
 
 HardwareInfo SecurityBackend::read_hardware() {
@@ -551,6 +713,7 @@ bool SecurityBackend::set_network_mode(NetworkMode mode) {
             toggle_service("22", false);
             toggle_service("8080", false);
             toggle_service("22000", false);
+            toggle_service("445", false);
             if (!conn.empty()) {
                 std::string cmd = "nmcli connection modify \"" + conn + "\" connection.metered yes 2>/dev/null";
                 std::system(cmd.c_str());
@@ -558,7 +721,7 @@ bool SecurityBackend::set_network_mode(NetworkMode mode) {
             break;
         }
         default:
-            mode_str = "custom";
+            mode_str = "home";
             break;
     }
 

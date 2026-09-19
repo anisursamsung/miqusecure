@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
         "Firewall Rules & Network Defense",
         "Active Sockets & Bandwidth Monitor",
         "Encrypted Resolvers & Leak Prevention",
-        "mat2 Scrubber & Document Sanitizer",
+        "Metadata Sanitizer & System Cleaner",
         "Killswitches & Sensor Access",
         "Kernel LSMs & Flatpak Confinement",
         "Distrobox Disposable Environments"
@@ -177,9 +177,9 @@ int main(int argc, char** argv) {
     dns_view = std::make_shared<DnsView>(dummy_dns, refresh_fn);
     pager->add_page(dns_view);
 
-    // Page 3: Metadata Scrubber
-    MetadataInfo dummy_meta;
-    metadata_view = std::make_shared<MetadataView>(dummy_meta);
+    // Page 3: Metadata & System Cleaner
+    CleanerInfo dummy_cleaner;
+    metadata_view = std::make_shared<CleanerView>(dummy_cleaner, refresh_fn);
     pager->add_page(metadata_view);
 
     // Page 4: Hardware Sensors & Radios
@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
         ->addItem("Firewall", "🛡️")
         ->addItem("Traffic", "🌐")
         ->addItem("DNS", "🔒")
-        ->addItem("Metadata", "🧹")
+        ->addItem("Cleaner", "🧹")
         ->addItem("Hardware", "💻")
         ->addItem("Sandbox", "📦")
         ->addItem("Testbed", "🧪")

@@ -14,23 +14,25 @@ public:
     void update_info(const DnsInfo& info);
 
 private:
-    void rebuild_profiles_list();
-    void update_profile_descriptions(int index);
-    static int get_profile_index(const DnsInfo& info);
-
     DnsInfo m_info;
     std::function<void()> m_on_changed;
     bool m_updating_ui = false;
 
     std::shared_ptr<miqu::LinearLayout> m_layout;
-    std::shared_ptr<miqu::TextView> m_mode_lbl;
-    std::shared_ptr<miqu::TextView> m_status_desc;
-    std::shared_ptr<miqu::TextView> m_conn_lbl;
-    std::shared_ptr<miqu::LinearLayout> m_profiles_container;
-    std::shared_ptr<miqu::Spinner> m_spinner_dns;
-    std::shared_ptr<miqu::TextView> m_profile_desc;
-    std::shared_ptr<miqu::TextView> m_profile_tech_desc;
+    std::shared_ptr<miqu::TextView> m_status_icon;
+    std::shared_ptr<miqu::TextView> m_status_lbl;
+    std::shared_ptr<miqu::Switch> m_switch_master;
     std::shared_ptr<miqu::ProgressBar> m_progress_bar;
+
+    // Custom DNS inputs
+    std::shared_ptr<miqu::EditText> m_input_primary;
+    std::shared_ptr<miqu::EditText> m_input_secondary;
+
+    // 2x2 grid switches
+    std::shared_ptr<miqu::Switch> m_switch_quad9;
+    std::shared_ptr<miqu::Switch> m_switch_adguard;
+    std::shared_ptr<miqu::Switch> m_switch_mullvad;
+    std::shared_ptr<miqu::Switch> m_switch_cloudflare;
 };
 
 } // namespace miqusecure
