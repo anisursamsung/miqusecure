@@ -1,4 +1,5 @@
 #include "sandbox_view.hpp"
+#include "ui_components.hpp"
 
 using namespace miqu;
 
@@ -15,20 +16,34 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(4, 2);
+    m_layout->set_padding(18, 14);
 
     // =========================================================================
-    // 1. KERNEL POSTURE HEADER (Clean Borderless Hero)
+    // 1. KERNEL POSTURE HERO CARD (Windows Security / iOS Style)
     // =========================================================================
-    auto hero_row = std::make_shared<LinearLayout>(Orientation::Vertical);
-    hero_row->set_layout_params(LayoutParams(
+    auto auto_cfg = Config::get();
+    auto hero_card = std::make_shared<CardView>();
+    hero_card->set_padding(14, 12);
+    hero_card->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    hero_row->set_margin(0, 4, 0, 16);
+    hero_card->set_margin(0, 0, 0, 14);
 
-    auto title = TextViewBuilder::create()->text("🛡️ Application Sandboxing & Defense")->h2()->bold(true)->build();
-    title->set_margin(0, 0, 0, 2);
+    auto hero_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    hero_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+
+    auto hero_badge = ui::make_icon_badge("🛡️", auto_cfg->colors.primary_container, 32, 8, 12);
+    hero_row->add_view(hero_badge);
+
+    auto hero_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    hero_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+
+    auto title = TextViewBuilder::create()->text("Application Sandboxing & Kernel Defense")->h2()->bold(true)->build();
 
     std::string lsm_str = "";
     for (size_t i = 0; i < m_info.active_lsms.size(); ++i) {
@@ -41,11 +56,16 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
         ->text("Active Kernel Modules: " + lsm_str)
         ->caption()
         ->muted()
+        ->multiline(true)
+        ->ellipsize(false)
         ->build();
+    m_stack_lbl->set_margin(0, 4, 0, 0);
 
-    hero_row->add_view(title);
-    hero_row->add_view(m_stack_lbl);
-    m_layout->add_view(hero_row);
+    hero_col->add_view(title);
+    hero_col->add_view(m_stack_lbl);
+    hero_row->add_view(hero_col);
+    hero_card->add_view(hero_row);
+    m_layout->add_view(hero_card);
 
     // =========================================================================
     // 2. FLATPAK APPS CONTAINER (OR INSTALL GUIDE IF MISSING)
@@ -60,23 +80,17 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
     m_layout->add_view(m_flatpak_container);
 
     // =========================================================================
-    // 3. KERNEL PROTECTION SUBSYSTEMS (Unified Grouped Card with Dividers)
+    // 3. KERNEL PROTECTION SUBSYSTEMS (Unified Grouped Card Container)
     // =========================================================================
-    auto sec_title = TextViewBuilder::create()
-        ->text("Active Kernel Defenses")
-        ->h3()
-        ->bold(true)
-        ->build();
-    sec_title->set_margin(0, 4, 0, 8);
-    m_layout->add_view(sec_title);
+    m_layout->add_view(ui::make_section_header("ACTIVE KERNEL DEFENSES"));
 
     auto unified_card = std::make_shared<CardView>();
-    unified_card->set_padding(14, 6);
+    unified_card->set_padding(14, 10);
     unified_card->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    unified_card->set_margin(0, 0, 0, 16);
+    unified_card->set_margin(0, 0, 0, 14);
 
     auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     list_col->set_layout_params(LayoutParams(
@@ -84,8 +98,11 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
 
-    auto make_module_row = [](const std::string& icon, const std::string& name,
-                              const std::string& desc, const std::string& status_txt) {
+    auto make_module_row = [](const std::string& icon,
+                              const std::string& name,
+                              const std::string& desc, const std::string& status_txt,
+                              bool is_active) {
+        auto cfg = Config::get();
         auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
         row->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
@@ -94,26 +111,29 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
         ));
         row->set_margin(4, 6, 4, 6);
 
-        auto icon_tv = TextViewBuilder::create()->text(icon)->h2()->build();
-        icon_tv->set_margin(0, 0, 14, 0);
-        row->add_view(icon_tv);
+        auto badge = ui::make_icon_badge(icon, cfg->colors.surface_variant, 32, 8, 12);
+        row->add_view(badge);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
         col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
         auto name_tv = TextViewBuilder::create()->text(name)->bold(true)->build();
-        auto desc_tv = TextViewBuilder::create()->text(desc)->caption()->muted()->multiline(true)->maxLines(2)->ellipsize(true)->build();
+        auto desc_tv = TextViewBuilder::create()
+            ->text(desc)
+            ->caption()
+            ->muted()
+            ->multiline(true)
+            ->ellipsize(false)
+            ->build();
+        desc_tv->set_margin(0, 2, 0, 0);
 
         col->add_view(name_tv);
         col->add_view(desc_tv);
         row->add_view(col);
 
-        auto st_tv = TextViewBuilder::create()
-            ->text(status_txt)
-            ->caption()
-            ->bold(true)
-            ->build();
-        row->add_view(st_tv);
+        std::shared_ptr<TextView> out_lbl;
+        auto pill = ui::make_status_pill(status_txt, out_lbl, is_active ? cfg->colors.primary_container : cfg->colors.surface_variant);
+        row->add_view(pill);
 
         return row;
     };
@@ -122,15 +142,13 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
     std::string landlock_status = m_info.landlock_active ? "✔ Active" : "○ Inactive";
     list_col->add_view(make_module_row("🏰", "Landlock LSM (Process Isolation)",
         "Allows apps to voluntarily restrict their own filesystem and internet access without requiring root passwords.",
-        landlock_status));
-    list_col->add_view(DividerViewBuilder::create()->margin(0, 4)->build());
+        landlock_status, m_info.landlock_active));
 
     // YAMA
     std::string yama_status = m_info.yama_active ? "✔ Protected" : "○ Inactive";
     list_col->add_view(make_module_row("🔒", "YAMA Memory Guard (Anti-Spyware)",
         "Stops background malware or untrusted programs from reading browser passwords or debugging other running apps.",
-        yama_status));
-    list_col->add_view(DividerViewBuilder::create()->margin(0, 4)->build());
+        yama_status, m_info.yama_active));
 
     // AppArmor
     std::string aa_status = "○ Inactive";
@@ -139,7 +157,7 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
     }
     list_col->add_view(make_module_row("🛡️", "AppArmor Profiles",
         "Mandatory system confinement profiles restricting application directories and network capabilities.",
-        aa_status));
+        aa_status, m_info.apparmor_active));
 
     unified_card->add_view(list_col);
     m_layout->add_view(unified_card);
@@ -147,9 +165,6 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
     // =========================================================================
     // 4. "WHAT IS SANDBOXING?" (Soft Tinted, Borderless Callout)
     // =========================================================================
-    m_layout->add_view(DividerViewBuilder::create()->margin(0, 10)->build());
-
-    auto auto_cfg = Config::get();
     auto guide_card = std::make_shared<FrameLayout>();
     guide_card->set_background_color(auto_cfg->colors.surface_variant);
     guide_card->set_corner_radius(10);
@@ -158,6 +173,7 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    guide_card->set_margin(0, 4, 0, 10);
 
     auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     auto g_title = TextViewBuilder::create()->text("💡 What is App Sandboxing?")->bold(true)->build();
@@ -166,7 +182,9 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
         ->caption()
         ->muted()
         ->multiline(true)
+        ->ellipsize(false)
         ->build();
+    g_desc->set_margin(0, 4, 0, 0);
     guide_col->add_view(g_title);
     guide_col->add_view(g_desc);
     guide_card->add_view(guide_col);
@@ -189,7 +207,7 @@ void SandboxView::rebuild_flatpak_section() {
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent)
         ));
-        inst_box->set_margin(0, 0, 0, 16);
+        inst_box->set_margin(0, 0, 0, 14);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
         auto t = TextViewBuilder::create()->text("📦 Want Easy App Sandboxing?")->bold(true)->build();
@@ -198,6 +216,7 @@ void SandboxView::rebuild_flatpak_section() {
             ->caption()
             ->muted()
             ->multiline(true)
+            ->ellipsize(false)
             ->build();
         d->set_margin(0, 4, 0, 0);
 
@@ -206,29 +225,26 @@ void SandboxView::rebuild_flatpak_section() {
         inst_box->add_view(col);
         m_flatpak_container->add_view(inst_box);
     } else {
-        auto fp_hdr = TextViewBuilder::create()
-            ->text("Sandboxed Applications (" + std::to_string(m_info.flatpak_apps.size()) + ")")
-            ->h3()
-            ->bold(true)
-            ->build();
-        fp_hdr->set_margin(0, 0, 0, 8);
-        m_flatpak_container->add_view(fp_hdr);
+        m_flatpak_container->add_view(ui::make_section_header("SANDBOXED APPLICATIONS (" + std::to_string(m_info.flatpak_apps.size()) + ")"));
 
         if (m_info.flatpak_apps.empty()) {
             auto empty_tv = TextViewBuilder::create()
                 ->text("Flatpak is installed, but no sandboxed apps have been installed yet.")
                 ->caption()
                 ->muted()
+                ->multiline(true)
+                ->ellipsize(false)
                 ->build();
+            empty_tv->set_margin(4, 0, 4, 14);
             m_flatpak_container->add_view(empty_tv);
         } else {
             auto fp_card = std::make_shared<CardView>();
-            fp_card->set_padding(14, 6);
+            fp_card->set_padding(14, 10);
             fp_card->set_layout_params(LayoutParams(
                 static_cast<int>(LayoutDimension::MatchParent),
                 static_cast<int>(LayoutDimension::WrapContent)
             ));
-            fp_card->set_margin(0, 0, 0, 16);
+            fp_card->set_margin(0, 0, 0, 14);
 
             auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
             list_col->set_layout_params(LayoutParams(
@@ -236,6 +252,7 @@ void SandboxView::rebuild_flatpak_section() {
                 static_cast<int>(LayoutDimension::WrapContent)
             ));
 
+            auto cfg = Config::get();
             for (size_t i = 0; i < m_info.flatpak_apps.size(); ++i) {
                 const auto& app = m_info.flatpak_apps[i];
                 auto a_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
@@ -246,22 +263,30 @@ void SandboxView::rebuild_flatpak_section() {
                 ));
                 a_row->set_margin(4, 6, 4, 6);
 
+                auto a_badge = ui::make_icon_badge("📦", cfg->colors.surface_variant, 32, 8, 12);
+                a_row->add_view(a_badge);
+
                 auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
                 col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
                 auto n_tv = TextViewBuilder::create()->text(app.name)->bold(true)->build();
-                auto id_tv = TextViewBuilder::create()->text(app.id)->caption()->muted()->ellipsize(true)->build();
+                auto id_tv = TextViewBuilder::create()
+                    ->text(app.id)
+                    ->caption()
+                    ->muted()
+                    ->multiline(true)
+                    ->ellipsize(false)
+                    ->build();
+                id_tv->set_margin(0, 2, 0, 0);
                 col->add_view(n_tv);
                 col->add_view(id_tv);
                 a_row->add_view(col);
 
-                auto badge = TextViewBuilder::create()->text("🛡️ Sandboxed")->caption()->bold(true)->build();
-                a_row->add_view(badge);
+                std::shared_ptr<TextView> out_b;
+                auto pill = ui::make_status_pill("🛡️ Sandboxed", out_b, cfg->colors.primary_container);
+                a_row->add_view(pill);
 
                 list_col->add_view(a_row);
-                if (i + 1 < m_info.flatpak_apps.size()) {
-                    list_col->add_view(DividerViewBuilder::create()->margin(0, 4)->build());
-                }
             }
 
             fp_card->add_view(list_col);

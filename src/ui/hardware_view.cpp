@@ -1,4 +1,5 @@
 #include "hardware_view.hpp"
+#include "ui_components.hpp"
 #include <thread>
 
 using namespace miqu;
@@ -17,24 +18,39 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(4, 2);
+    m_layout->set_padding(18, 14);
 
     // =========================================================================
-    // 1. MASTER AIRPLANE MODE / RADIO KILLSWITCH (Clean Borderless Hero)
+    // 1. MASTER AIRPLANE MODE HERO CARD (Windows Security / iOS Style)
     // =========================================================================
+    auto auto_cfg = Config::get();
+    auto hero_card = std::make_shared<CardView>();
+    hero_card->set_padding(14, 12);
+    hero_card->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    hero_card->set_margin(0, 0, 0, 14);
+
     auto hero_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     hero_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    hero_row->set_margin(0, 4, 0, 16);
+
+    auto hero_badge = ui::make_icon_badge(
+        "✈️",
+        m_info.airplane_mode ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant,
+        32, 8, 12
+    );
+    hero_row->add_view(hero_badge);
 
     auto hero_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     hero_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
     m_airplane_lbl = TextViewBuilder::create()
-        ->text(m_info.airplane_mode ? "✈️ Airplane Mode is ON (Radios Silenced)" : "✈️ Airplane Mode is OFF")
+        ->text(m_info.airplane_mode ? "Airplane Mode is Active (Radios Silenced)" : "Airplane Mode is Disabled")
         ->h2()
         ->bold(true)
         ->build();
@@ -47,8 +63,10 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
         ->text(air_desc)
         ->caption()
         ->muted()
+        ->multiline(true)
+        ->ellipsize(false)
         ->build();
-    m_airplane_desc->set_margin(0, 2, 0, 0);
+    m_airplane_desc->set_margin(0, 4, 0, 0);
 
     hero_col->add_view(m_airplane_lbl);
     hero_col->add_view(m_airplane_desc);
@@ -75,26 +93,21 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
         }).detach();
     });
     hero_row->add_view(m_switch_airplane);
-    m_layout->add_view(hero_row);
+    hero_card->add_view(hero_row);
+    m_layout->add_view(hero_card);
 
     // =========================================================================
-    // 2. WIRELESS RADIOS & TRANSMITTERS (Grouped Card with Dividers)
+    // 2. WIRELESS RADIOS & TRANSMITTERS (Grouped Card Container)
     // =========================================================================
-    auto rad_title = TextViewBuilder::create()
-        ->text("Wireless Transmitters")
-        ->h3()
-        ->bold(true)
-        ->build();
-    rad_title->set_margin(0, 0, 0, 8);
-    m_layout->add_view(rad_title);
+    m_layout->add_view(ui::make_section_header("WIRELESS TRANSMITTERS"));
 
     auto rad_card = std::make_shared<CardView>();
-    rad_card->set_padding(14, 6);
+    rad_card->set_padding(14, 10);
     rad_card->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    rad_card->set_margin(0, 0, 0, 16);
+    rad_card->set_margin(0, 0, 0, 14);
 
     auto rad_list = std::make_shared<LinearLayout>(Orientation::Vertical);
     rad_list->set_layout_params(LayoutParams(
@@ -111,19 +124,21 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     wifi_row->set_margin(4, 6, 4, 6);
 
+    auto wifi_badge = ui::make_icon_badge("📶", auto_cfg->colors.surface_variant, 32, 8, 12);
+    wifi_row->add_view(wifi_badge);
+
     auto wifi_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     wifi_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
-    auto wifi_title = TextViewBuilder::create()->text("📶 Wi-Fi Wireless Radio")->bold(true)->build();
+    auto wifi_title = TextViewBuilder::create()->text("Wi-Fi Wireless Radio")->bold(true)->build();
     auto wifi_desc = TextViewBuilder::create()
         ->text("Connects to local wireless networks. Disabling Wi-Fi physically powers down the antenna and drops all incoming over-the-air connections.")
         ->caption()
         ->multiline(true)
-        ->maxLines(2)
-        ->ellipsize(true)
+        ->ellipsize(false)
         ->build();
     wifi_desc->set_margin(0, 2, 0, 2);
-    auto wifi_tech = TextViewBuilder::create()->text("⚙ nmcli: radio wifi on/off | rfkill: wlan")->caption()->muted()->ellipsize(true)->build();
+    auto wifi_tech = TextViewBuilder::create()->text("⚙ nmcli: radio wifi on/off | rfkill: wlan")->caption()->muted()->multiline(true)->ellipsize(false)->build();
 
     wifi_col->add_view(wifi_title);
     wifi_col->add_view(wifi_desc);
@@ -153,8 +168,6 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     wifi_row->add_view(m_switch_wifi);
     rad_list->add_view(wifi_row);
 
-    rad_list->add_view(DividerViewBuilder::create()->margin(0, 4)->build());
-
     // Bluetooth Row
     auto bt_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     bt_row->set_layout_params(LayoutParams(
@@ -164,19 +177,21 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     bt_row->set_margin(4, 6, 4, 6);
 
+    auto bt_badge = ui::make_icon_badge("ᛒ", auto_cfg->colors.surface_variant, 32, 8, 12);
+    bt_row->add_view(bt_badge);
+
     auto bt_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     bt_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
-    auto bt_title = TextViewBuilder::create()->text("ᛒ Bluetooth Wireless Radio")->bold(true)->build();
+    auto bt_title = TextViewBuilder::create()->text("Bluetooth Wireless Radio")->bold(true)->build();
     auto bt_desc = TextViewBuilder::create()
         ->text("Disables Bluetooth discovery and connections. Prevents physical beacon tracking in malls/airports and shuts down BlueBorne peripheral attacks.")
         ->caption()
         ->multiline(true)
-        ->maxLines(2)
-        ->ellipsize(true)
+        ->ellipsize(false)
         ->build();
     bt_desc->set_margin(0, 2, 0, 2);
-    auto bt_tech = TextViewBuilder::create()->text("⚙ bluetoothctl: power on/off | rfkill: bluetooth")->caption()->muted()->ellipsize(true)->build();
+    auto bt_tech = TextViewBuilder::create()->text("⚙ bluetoothctl: power on/off | rfkill: bluetooth")->caption()->muted()->multiline(true)->ellipsize(false)->build();
 
     bt_col->add_view(bt_title);
     bt_col->add_view(bt_desc);
@@ -210,23 +225,17 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     m_layout->add_view(rad_card);
 
     // =========================================================================
-    // 3. AUDIO & CAMERA HARDWARE PRIVACY (Grouped Card with Dividers)
+    // 3. AUDIO & CAMERA HARDWARE PRIVACY (Grouped Card Container)
     // =========================================================================
-    auto sen_title = TextViewBuilder::create()
-        ->text("Audio & Visual Privacy Sensors")
-        ->h3()
-        ->bold(true)
-        ->build();
-    sen_title->set_margin(0, 0, 0, 8);
-    m_layout->add_view(sen_title);
+    m_layout->add_view(ui::make_section_header("AUDIO & VISUAL PRIVACY SENSORS"));
 
     auto sen_card = std::make_shared<CardView>();
-    sen_card->set_padding(14, 6);
+    sen_card->set_padding(14, 10);
     sen_card->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    sen_card->set_margin(0, 0, 0, 16);
+    sen_card->set_margin(0, 0, 0, 14);
 
     auto sen_list = std::make_shared<LinearLayout>(Orientation::Vertical);
     sen_list->set_layout_params(LayoutParams(
@@ -243,19 +252,21 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     mic_row->set_margin(4, 6, 4, 6);
 
+    auto mic_badge = ui::make_icon_badge("🎙️", auto_cfg->colors.surface_variant, 32, 8, 12);
+    mic_row->add_view(mic_badge);
+
     auto mic_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     mic_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
-    auto mic_title = TextViewBuilder::create()->text("🎙️ Microphone Hardware Mute")->bold(true)->build();
+    auto mic_title = TextViewBuilder::create()->text("Microphone Hardware Mute")->bold(true)->build();
     auto mic_desc = TextViewBuilder::create()
         ->text("Silences the physical audio input at the PipeWire server layer. Guarantees no web browser or background application can eavesdrop.")
         ->caption()
         ->multiline(true)
-        ->maxLines(2)
-        ->ellipsize(true)
+        ->ellipsize(false)
         ->build();
     mic_desc->set_margin(0, 2, 0, 2);
-    auto mic_tech = TextViewBuilder::create()->text("⚙ wpctl: set-mute @DEFAULT_AUDIO_SOURCE@ 1/0 | PipeWire hardware source")->caption()->muted()->ellipsize(true)->build();
+    auto mic_tech = TextViewBuilder::create()->text("⚙ wpctl: set-mute @DEFAULT_AUDIO_SOURCE@ 1/0 | PipeWire hardware source")->caption()->muted()->multiline(true)->ellipsize(false)->build();
 
     mic_col->add_view(mic_title);
     mic_col->add_view(mic_desc);
@@ -285,8 +296,6 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     mic_row->add_view(m_switch_mic);
     sen_list->add_view(mic_row);
 
-    sen_list->add_view(DividerViewBuilder::create()->margin(0, 4)->build());
-
     // Webcam Live Sensor Row
     auto cam_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     cam_row->set_layout_params(LayoutParams(
@@ -296,16 +305,18 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     cam_row->set_margin(4, 6, 4, 6);
 
+    auto cam_badge = ui::make_icon_badge("📷", auto_cfg->colors.surface_variant, 32, 8, 12);
+    cam_row->add_view(cam_badge);
+
     auto cam_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     cam_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
-    auto cam_title = TextViewBuilder::create()->text("📷 Webcam Sensor Live Guard")->bold(true)->build();
+    auto cam_title = TextViewBuilder::create()->text("Webcam Sensor Live Guard")->bold(true)->build();
     auto cam_desc = TextViewBuilder::create()
         ->text("Actively monitors camera hardware devices (/dev/video*). Alerts immediately if any application or browser is streaming video.")
         ->caption()
         ->multiline(true)
-        ->maxLines(2)
-        ->ellipsize(true)
+        ->ellipsize(false)
         ->build();
     cam_desc->set_margin(0, 2, 0, 2);
 
@@ -313,19 +324,16 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
         ("⚠️ CAMERA ACTIVE: " + m_info.camera_active_proc) :
         (m_info.camera_detected ? ("✔ Idle - Camera present (" + m_info.camera_device_name + ") • No apps streaming") : "○ No webcam hardware detected");
 
-    m_cam_proc_lbl = TextViewBuilder::create()->text("⚙ " + cam_tech_str)->caption()->muted()->ellipsize(true)->build();
+    m_cam_proc_lbl = TextViewBuilder::create()->text("⚙ " + cam_tech_str)->caption()->muted()->multiline(true)->ellipsize(false)->build();
 
     cam_col->add_view(cam_title);
     cam_col->add_view(cam_desc);
     cam_col->add_view(m_cam_proc_lbl);
     cam_row->add_view(cam_col);
 
-    m_cam_status_badge = TextViewBuilder::create()
-        ->text(m_info.camera_in_use ? "● IN USE" : (m_info.camera_detected ? "● IDLE" : "DISABLED"))
-        ->bold(true)
-        ->build();
-    m_cam_status_badge->set_margin(8, 0, 8, 0);
-    cam_row->add_view(m_cam_status_badge);
+    std::string cam_status_txt = m_info.camera_in_use ? "● IN USE" : (m_info.camera_detected ? "● IDLE" : "DISABLED");
+    auto cam_pill = ui::make_status_pill(cam_status_txt, m_cam_status_badge, m_info.camera_in_use ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant);
+    cam_row->add_view(cam_pill);
 
     sen_list->add_view(cam_row);
     sen_card->add_view(sen_list);
@@ -334,9 +342,6 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     // =========================================================================
     // 4. "WHY HARDWARE SECURITY MATTERS" (Soft Tinted, Borderless Callout)
     // =========================================================================
-    m_layout->add_view(DividerViewBuilder::create()->margin(0, 10)->build());
-
-    auto auto_cfg = Config::get();
     auto guide_card = std::make_shared<FrameLayout>();
     guide_card->set_background_color(auto_cfg->colors.surface_variant);
     guide_card->set_corner_radius(10);
@@ -345,6 +350,7 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    guide_card->set_margin(0, 4, 0, 10);
 
     auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     auto g_title = TextViewBuilder::create()->text("💡 Why Hardware & Wireless Security Matters")->bold(true)->build();
@@ -356,7 +362,9 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
         ->caption()
         ->muted()
         ->multiline(true)
+        ->ellipsize(false)
         ->build();
+    g_desc->set_margin(0, 4, 0, 0);
     guide_col->add_view(g_title);
     guide_col->add_view(g_desc);
     guide_card->add_view(guide_col);
@@ -369,7 +377,7 @@ void HardwareView::update_info(const HardwareInfo& info) {
     m_info = info;
 
     if (m_airplane_lbl) {
-        m_airplane_lbl->set_text(m_info.airplane_mode ? "✈️ Airplane Mode is ON (Radios Silenced)" : "✈️ Airplane Mode is OFF");
+        m_airplane_lbl->set_text(m_info.airplane_mode ? "Airplane Mode is Active (Radios Silenced)" : "Airplane Mode is Disabled");
     }
 
     if (m_airplane_desc) {

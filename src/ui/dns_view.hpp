@@ -19,8 +19,8 @@ private:
     bool m_updating_ui = false;
 
     std::shared_ptr<miqu::LinearLayout> m_layout;
-    std::shared_ptr<miqu::TextView> m_status_icon;
     std::shared_ptr<miqu::TextView> m_status_lbl;
+    std::shared_ptr<miqu::TextView> m_status_desc;
     std::shared_ptr<miqu::Switch> m_switch_master;
     std::shared_ptr<miqu::ProgressBar> m_progress_bar;
 

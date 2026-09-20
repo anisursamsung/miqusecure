@@ -1,4 +1,5 @@
 #include "metadata_view.hpp"
+#include "ui_components.hpp"
 #include <filesystem>
 #include <thread>
 
@@ -19,58 +20,79 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(4, 2);
+    m_layout->set_padding(18, 14);
 
     // =========================================================================
-    // 0. CLEANER STATUS PILL (Centered WrapContent Hero Capsule)
+    // 1. MASTER CLEANER HERO CARD (Windows Security / iOS Style)
     // =========================================================================
-    auto status_pill = std::make_shared<CardView>();
-    status_pill->set_radius(26);
-    status_pill->set_padding(24, 12);
-    status_pill->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::WrapContent),
-        static_cast<int>(LayoutDimension::WrapContent),
-        Gravity::CenterHorizontal
+    auto auto_cfg = Config::get();
+    auto hero_card = std::make_shared<CardView>();
+    hero_card->set_padding(14, 12);
+    hero_card->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
     ));
-    status_pill->set_margin(0, 4, 0, 16);
+    hero_card->set_margin(0, 0, 0, 14);
 
-    auto status_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    status_row->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::WrapContent),
+    auto hero_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    hero_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
 
-    auto status_icon = TextViewBuilder::create()
-        ->text("🧹")
-        ->h2()
-        ->build();
-    status_icon->set_margin(0, 0, 12, 0);
-    status_row->add_view(status_icon);
+    auto hero_badge = ui::make_icon_badge("🧹", auto_cfg->colors.primary_container, 32, 8, 12);
+    hero_row->add_view(hero_badge);
 
-    auto status_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    auto hero_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    hero_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+
     m_status_lbl = TextViewBuilder::create()
         ->text("System & Metadata Cleaner")
-        ->h3()
+        ->h2()
         ->bold(true)
         ->build();
-    status_col->add_view(m_status_lbl);
 
     std::string badge_text = m_info.mat2_installed ?
-        ("mat2 Engine Ready" + (m_info.version.empty() ? "" : (" (" + m_info.version + ")"))) :
+        ("mat2 Anonymization Engine Ready" + (m_info.version.empty() ? "" : (" (" + m_info.version + ")"))) :
         "⚠️ mat2 Engine Not Installed";
 
     m_status_badge = TextViewBuilder::create()
         ->text(badge_text)
         ->caption()
         ->muted()
+        ->multiline(true)
+        ->ellipsize(false)
         ->build();
-    m_status_badge->set_margin(0, 2, 0, 0);
-    status_col->add_view(m_status_badge);
+    m_status_badge->set_margin(0, 4, 0, 0);
 
-    status_row->add_view(status_col);
-    status_pill->add_view(status_row);
-    m_layout->add_view(status_pill);
+    hero_col->add_view(m_status_lbl);
+    hero_col->add_view(m_status_badge);
+    hero_row->add_view(hero_col);
+
+    auto btn_clean_all = ButtonBuilder::create()
+        ->text("⚡ Clean All Caches")
+        ->flat(true)
+        ->bold(true)
+        ->padding(12, 6)
+        ->onClick([this]() {
+            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
+            std::thread([this]() {
+                std::string log;
+                SecurityBackend::clean_all_caches(log);
+                if (auto engine = AppEngine::instance()) {
+                    engine->post([this, log]() {
+                        if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
+                        if (m_result_lbl) m_result_lbl->set_text("✔ " + log);
+                        if (m_on_changed) m_on_changed();
+                    });
+                }
+            }).detach();
+        })
+        ->build();
+    hero_row->add_view(btn_clean_all);
+    hero_card->add_view(hero_row);
+    m_layout->add_view(hero_card);
 
     // Docked 3px linear progress bar
     m_progress_bar = ProgressBarBuilder::create()
@@ -87,15 +109,17 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
     m_layout->add_view(m_progress_bar);
 
     // =========================================================================
-    // 1. METADATA CLEANER CARD (Path Typer + Browse File + Clean)
+    // 2. METADATA CLEANER CARD (Unified Form Card)
     // =========================================================================
+    m_layout->add_view(ui::make_section_header("DOCUMENT & MEDIA SANITIZER"));
+
     auto meta_card = std::make_shared<CardView>();
-    meta_card->set_padding(16, 14);
+    meta_card->set_padding(14, 10);
     meta_card->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    meta_card->set_margin(0, 0, 0, 16);
+    meta_card->set_margin(0, 0, 0, 14);
 
     auto meta_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     meta_col->set_layout_params(LayoutParams(
@@ -103,12 +127,32 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
         static_cast<int>(LayoutDimension::WrapContent)
     ));
 
-    auto meta_title = TextViewBuilder::create()
-        ->text("🧼 Document & Media Metadata Anonymizer")
-        ->bold(true)
+    auto m_top = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    m_top->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+    m_top->set_margin(4, 4, 4, 8);
+
+    auto m_badge = ui::make_icon_badge("🧼", auto_cfg->colors.surface_variant, 32, 8, 12);
+    m_top->add_view(m_badge);
+
+    auto m_text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    m_text_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+    auto m_name = TextViewBuilder::create()->text("Local Metadata Anonymizer (mat2)")->bold(true)->build();
+    auto m_desc = TextViewBuilder::create()
+        ->text("Strips hidden GPS coordinates, camera serials, usernames, and edit histories without altering the original file.")
+        ->caption()
+        ->muted()
+        ->multiline(true)
+        ->ellipsize(false)
         ->build();
-    meta_title->set_margin(0, 0, 0, 10);
-    meta_col->add_view(meta_title);
+    m_desc->set_margin(0, 2, 0, 0);
+    m_text_col->add_view(m_name);
+    m_text_col->add_view(m_desc);
+    m_top->add_view(m_text_col);
+    meta_col->add_view(m_top);
 
     // Form row: File Path input + Pick File Browse Button + Clean Button
     auto form_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
@@ -117,207 +161,160 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    form_row->set_margin(0, 0, 0, 8);
+    form_row->set_margin(4, 6, 4, 6);
 
     m_path_input = EditTextBuilder::create()
         ->hint("Path to file or click Browse...")
-        ->padding(8, 6)
+        ->padding(12, 8)
         ->build();
     m_path_input->set_layout_params(LayoutParams(
         0,
         static_cast<int>(LayoutDimension::WrapContent),
         1.0f
     ));
-    m_path_input->set_margin(0, 0, 8, 0);
+    m_path_input->set_margin(0, 0, 10, 0);
     form_row->add_view(m_path_input);
 
-    m_btn_browse = ButtonBuilder::create()
-        ->text("📁 Browse...")
+    auto btn_browse = ButtonBuilder::create()
+        ->text("📂 Browse...")
         ->flat(true)
-        ->padding(10, 6)
+        ->padding(10, 8)
         ->onClick([this]() {
-            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-            std::thread([this]() {
-                FILE* pipe = popen("zenity --file-selection --title=\"Select File to Clean Metadata\" 2>/dev/null", "r");
-                std::string chosen_path;
-                if (pipe) {
-                    char buffer[1024];
-                    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-                        chosen_path += buffer;
-                    }
-                    pclose(pipe);
+            std::string cmd = "zenity --file-selection --title=\"Select File to Clean Metadata\" 2>/dev/null";
+            FILE* pipe = popen(cmd.c_str(), "r");
+            if (pipe) {
+                char buffer[512];
+                std::string result = "";
+                while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                    result += buffer;
                 }
-                while (!chosen_path.empty() && (chosen_path.back() == '\n' || chosen_path.back() == '\r')) {
-                    chosen_path.pop_back();
+                pclose(pipe);
+                size_t last = result.find_last_not_of(" \t\n\r");
+                if (last != std::string::npos) {
+                    result = result.substr(0, last + 1);
                 }
-
-                if (auto engine = AppEngine::instance()) {
-                    engine->post([this, chosen_path]() {
-                        if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
-                        if (!chosen_path.empty() && m_path_input) {
-                            m_path_input->set_text(chosen_path);
-                            if (m_result_lbl) m_result_lbl->set_text("Selected: " + chosen_path);
-                        }
-                    });
+                if (!result.empty() && m_path_input) {
+                    m_path_input->set_text(result);
                 }
-            }).detach();
-        })
-        ->build();
-    m_btn_browse->set_margin(0, 0, 8, 0);
-    form_row->add_view(m_btn_browse);
-
-    m_btn_clean_file = ButtonBuilder::create()
-        ->text("🧼 Clean Metadata")
-        ->primary(true)
-        ->padding(12, 6)
-        ->onClick([this]() {
-            if (m_path_input) {
-                clean_file(m_path_input->get_text());
             }
         })
         ->build();
-    form_row->add_view(m_btn_clean_file);
-    meta_col->add_view(form_row);
+    btn_browse->set_margin(0, 0, 10, 0);
+    form_row->add_view(btn_browse);
 
-    m_result_lbl = TextViewBuilder::create()
-        ->text("")
-        ->caption()
-        ->multiline(true)
-        ->build();
-    m_result_lbl->set_margin(0, 0, 0, 4);
-    meta_col->add_view(m_result_lbl);
-
-    auto meta_note = TextViewBuilder::create()
-        ->text("Strips hidden GPS coordinates, camera serials, usernames, and edit histories using mat2 without altering the original (creates a safe '.cleaned' file).")
-        ->caption()
-        ->muted()
-        ->multiline(true)
-        ->build();
-    meta_col->add_view(meta_note);
-
-    meta_card->add_view(meta_col);
-    m_layout->add_view(meta_card);
-
-    // =========================================================================
-    // 2. BLEACHBIT-STYLE QUICK CACHE & PRIVACY CLEANERS (2x2 Grid)
-    // =========================================================================
-    auto bleach_hdr_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    bleach_hdr_row->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent),
-        Gravity::CenterVertical
-    ));
-    bleach_hdr_row->set_margin(0, 0, 0, 8);
-
-    auto bleach_title = TextViewBuilder::create()
-        ->text("🧽 Quick Privacy & Cache Cleaner")
-        ->h3()
-        ->bold(true)
-        ->build();
-    bleach_title->set_layout_params(LayoutParams(
-        0,
-        static_cast<int>(LayoutDimension::WrapContent),
-        1.0f
-    ));
-    bleach_hdr_row->add_view(bleach_title);
-
-    auto btn_clean_all = ButtonBuilder::create()
-        ->text("⚡ Clean All Caches")
-        ->flat(true)
-        ->bold(true)
-        ->padding(10, 4)
+    auto btn_clean = ButtonBuilder::create()
+        ->text("🧼 Strip Metadata")
+        ->primary(true)
+        ->padding(14, 8)
         ->onClick([this]() {
+            if (!m_path_input) return;
+            std::string file_path = m_path_input->get_text();
+            if (file_path.empty() || !fs::exists(file_path)) {
+                if (m_result_lbl) m_result_lbl->set_text("⚠️ Please select a valid file path first.");
+                return;
+            }
+
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-            std::thread([this]() {
+            std::thread([this, file_path]() {
                 std::string log;
-                SecurityBackend::clean_all_caches(log);
+                bool ok = SecurityBackend::clean_metadata(file_path, log);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, log]() {
+                    engine->post([this, ok, log]() {
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
-                        if (m_result_lbl) m_result_lbl->set_text("✔ " + log);
+                        if (m_result_lbl) m_result_lbl->set_text(ok ? ("✔ " + log) : ("Error: " + log));
                         if (m_on_changed) m_on_changed();
                     });
                 }
             }).detach();
         })
         ->build();
-    bleach_hdr_row->add_view(btn_clean_all);
-    m_layout->add_view(bleach_hdr_row);
+    form_row->add_view(btn_clean);
+    meta_col->add_view(form_row);
 
-    auto make_cache_card = [this](const std::string& icon, const std::string& title,
-                                  const std::string& desc,
-                                  const std::string& initial_size,
-                                  std::shared_ptr<TextView>& out_size_lbl,
-                                  std::function<bool(std::string&)> clean_action,
-                                  int margin_left, int margin_right,
-                                  LayoutDimension height_dim = LayoutDimension::WrapContent) {
-        auto card = std::make_shared<CardView>();
-        card->set_padding(16, 14);
-        card->set_layout_params(LayoutParams(
-            0,
-            static_cast<int>(height_dim),
-            1.0f
-        ));
-        card->set_margin(margin_left, 0, margin_right, 0);
+    // Results feedback label
+    m_result_lbl = TextViewBuilder::create()
+        ->text("")
+        ->caption()
+        ->muted()
+        ->multiline(true)
+        ->ellipsize(false)
+        ->build();
+    m_result_lbl->set_margin(4, 4, 4, 0);
+    meta_col->add_view(m_result_lbl);
 
-        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-        col->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::MatchParent)
-        ));
+    meta_card->add_view(meta_col);
+    m_layout->add_view(meta_card);
 
-        // Top row: Title + Size badge
-        auto top_r = std::make_shared<LinearLayout>(Orientation::Horizontal);
-        top_r->set_layout_params(LayoutParams(
+    // =========================================================================
+    // 3. PRIVACY & CACHE CLEANERS (Grouped Inset Card)
+    // =========================================================================
+    m_layout->add_view(ui::make_section_header("SYSTEM & APP CACHE PURGE"));
+
+    auto cache_card = std::make_shared<CardView>();
+    cache_card->set_padding(14, 10);
+    cache_card->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    cache_card->set_margin(0, 0, 0, 14);
+
+    auto cache_list = std::make_shared<LinearLayout>(Orientation::Vertical);
+    cache_list->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+
+    auto make_cache_row = [this](const std::string& icon,
+                                 const std::string& title,
+                                 const std::string& desc,
+                                 const std::string& initial_size,
+                                 std::shared_ptr<TextView>& out_size_lbl,
+                                 std::function<bool(std::string&)> clean_action) {
+        auto cfg = Config::get();
+        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+        row->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::CenterVertical
         ));
-        top_r->set_margin(0, 0, 0, 6);
+        row->set_margin(4, 6, 4, 6);
 
-        auto t_tv = TextViewBuilder::create()
-            ->text(icon + " " + title)
-            ->bold(true)
-            ->ellipsize(true)
-            ->build();
-        t_tv->set_layout_params(LayoutParams(
-            0,
+        auto badge = ui::make_icon_badge(icon, cfg->colors.surface_variant, 32, 8, 12);
+        row->add_view(badge);
+
+        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
+        col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+
+        auto title_r = std::make_shared<LinearLayout>(Orientation::Horizontal);
+        title_r->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent),
-            1.0f
+            Gravity::CenterVertical
         ));
-        t_tv->set_margin(0, 0, 6, 0);
-        top_r->add_view(t_tv);
 
-        out_size_lbl = TextViewBuilder::create()
-            ->text(initial_size)
-            ->caption()
-            ->bold(true)
-            ->build();
-        top_r->add_view(out_size_lbl);
-        col->add_view(top_r);
+        auto title_tv = TextViewBuilder::create()->text(title)->bold(true)->build();
+        title_tv->set_margin(0, 0, 8, 0);
+        title_r->add_view(title_tv);
 
-        // Description
-        auto d_tv = TextViewBuilder::create()
+        auto pill = ui::make_status_pill(initial_size, out_size_lbl);
+        title_r->add_view(pill);
+        col->add_view(title_r);
+
+        auto desc_tv = TextViewBuilder::create()
             ->text(desc)
             ->caption()
             ->muted()
             ->multiline(true)
-            ->maxLines(2)
-            ->ellipsize(true)
+            ->ellipsize(false)
             ->build();
-        d_tv->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            0,
-            1.0f
-        ));
-        d_tv->set_margin(0, 0, 0, 8);
-        col->add_view(d_tv);
+        desc_tv->set_margin(0, 2, 0, 0);
+        col->add_view(desc_tv);
+        row->add_view(col);
 
-        // Clean action button
         auto clean_btn = ButtonBuilder::create()
             ->text("Clean Now")
             ->flat(true)
-            ->padding(8, 4)
+            ->padding(10, 6)
             ->onClick([this, clean_action]() {
                 if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
                 std::thread([this, clean_action]() {
@@ -334,69 +331,45 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
             })
             ->build();
         clean_btn->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
+            static_cast<int>(LayoutDimension::WrapContent),
             static_cast<int>(LayoutDimension::WrapContent)
         ));
-        col->add_view(clean_btn);
+        clean_btn->set_margin(10, 0, 0, 0);
+        row->add_view(clean_btn);
 
-        card->add_view(col);
-        return card;
+        return row;
     };
 
-    // Row 1: Thumbnails (Left) & Browser Caches (Right)
-    auto cache_row1 = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    cache_row1->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    cache_row1->set_margin(0, 0, 0, 10);
-
-    auto card_thumb = make_cache_card("🖼️", "Thumbnail Cache",
+    // 1. Thumbnails
+    cache_list->add_view(make_cache_row("🖼️", "Thumbnail Cache",
         "Purge image and video thumbnail preview files.",
         m_info.thumbnails_size, m_thumb_size_lbl,
-        [](std::string& log) { return SecurityBackend::clean_thumbnails(log); },
-        0, 6, LayoutDimension::WrapContent);
-    cache_row1->add_view(card_thumb);
+        [](std::string& log) { return SecurityBackend::clean_thumbnails(log); }));
 
-    auto card_browser = make_cache_card("🌐", "Browser Caches",
+    // 2. Browser Caches
+    cache_list->add_view(make_cache_row("🌐", "Browser Caches",
         "Purge Chrome, Firefox & Chromium temporary offline caches.",
         m_info.browser_cache_size, m_browser_size_lbl,
-        [](std::string& log) { return SecurityBackend::clean_browser_caches(log); },
-        6, 0, LayoutDimension::MatchParent);
-    cache_row1->add_view(card_browser);
+        [](std::string& log) { return SecurityBackend::clean_browser_caches(log); }));
 
-    m_layout->add_view(cache_row1);
-
-    // Row 2: Trash & Temp (Left) & Shell History (Right)
-    auto cache_row2 = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    cache_row2->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    cache_row2->set_margin(0, 0, 0, 16);
-
-    auto card_trash = make_cache_card("🗑️", "Trash Bin & Temp",
+    // 3. Trash & Temp
+    cache_list->add_view(make_cache_row("🗑️", "Trash Bin & Temp",
         "Empty deleted trash files and shader cache directories.",
         m_info.trash_size, m_trash_size_lbl,
-        [](std::string& log) { return SecurityBackend::clean_trash_and_temp(log); },
-        0, 6, LayoutDimension::WrapContent);
-    cache_row2->add_view(card_trash);
+        [](std::string& log) { return SecurityBackend::clean_trash_and_temp(log); }));
 
-    auto card_hist = make_cache_card("📜", "Shell History",
+    // 4. Shell History
+    cache_list->add_view(make_cache_row("📜", "Shell History",
         "Clear bash, zsh & terminal command prompt histories.",
         m_info.bash_history_size, m_history_size_lbl,
-        [](std::string& log) { return SecurityBackend::clean_shell_history(log); },
-        6, 0, LayoutDimension::MatchParent);
-    cache_row2->add_view(card_hist);
+        [](std::string& log) { return SecurityBackend::clean_shell_history(log); }));
 
-    m_layout->add_view(cache_row2);
+    cache_card->add_view(cache_list);
+    m_layout->add_view(cache_card);
 
     // =========================================================================
-    // 3. EDUCATIONAL "WHAT IS METADATA & CACHE?" (Soft Tinted Callout)
+    // 4. EDUCATIONAL "WHAT IS METADATA & CACHE?" (Soft Tinted Callout)
     // =========================================================================
-    m_layout->add_view(DividerViewBuilder::create()->margin(0, 4, 0, 10)->build());
-
-    auto auto_cfg = Config::get();
     auto guide_card = std::make_shared<FrameLayout>();
     guide_card->set_background_color(auto_cfg->colors.surface_variant);
     guide_card->set_corner_radius(10);
@@ -405,6 +378,7 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    guide_card->set_margin(0, 4, 0, 10);
 
     auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     auto g_title = TextViewBuilder::create()->text("💡 Why Clean Metadata & System Caches?")->bold(true)->build();
@@ -413,7 +387,9 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
         ->caption()
         ->muted()
         ->multiline(true)
+        ->ellipsize(false)
         ->build();
+    g_desc->set_margin(0, 4, 0, 0);
     guide_col->add_view(g_title);
     guide_col->add_view(g_desc);
     guide_card->add_view(guide_col);
