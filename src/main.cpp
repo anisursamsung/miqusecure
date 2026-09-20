@@ -12,14 +12,68 @@
 #include <memory>
 #include <array>
 
+#include <fstream>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
 using namespace miqu;
 using namespace miqusecure;
 
+static std::string trim_str(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\r\n\"'");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\r\n\"'");
+    return str.substr(first, (last - first + 1));
+}
+
 int main(int argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            std::cout << "Usage: miqusecure\n\n"
+                      << "Modern native privacy & security control center built with miqutoolkit.\n";
+            return 0;
+        }
+    }
+
     auto engine = AppEngine::create();
     if (!engine) {
         std::cerr << "[miqusecure] Failed to initialize AppEngine.\n";
         return 1;
+    }
+
+    // Resolve and bootstrap configuration file
+    std::string user_conf = Config::ensure_user_config("miqusecure", "miqusecure.conf");
+    std::string target_conf;
+    if (!user_conf.empty() && fs::exists(user_conf)) {
+        target_conf = user_conf;
+    } else if (fs::exists("/usr/share/miqusecure/miqusecure.conf")) {
+        target_conf = "/usr/share/miqusecure/miqusecure.conf";
+    }
+
+    int default_tab = 0;
+
+    if (!target_conf.empty()) {
+        // Overlay any toolkit appearance overrides (colors, fonts, metrics, icon_theme)
+        Config::get()->load_from_file(target_conf);
+
+        std::ifstream file(target_conf);
+        std::string line;
+        while (std::getline(file, line)) {
+            line = trim_str(line);
+            if (line.empty() || line[0] == '#' || line[0] == ';') continue;
+            auto eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            std::string k = trim_str(line.substr(0, eq));
+            std::string v = trim_str(line.substr(eq + 1));
+            size_t cp = v.find('#');
+            if (cp != std::string::npos) v = trim_str(v.substr(0, cp));
+
+            if (k == "default_tab" && !v.empty()) {
+                try { default_tab = std::clamp(std::stoi(v), 0, 6); } catch (...) {}
+            }
+        }
     }
 
     FirewallInfo initial_fw = SecurityBackend::read_firewall();
@@ -133,7 +187,7 @@ int main(int argc, char** argv) {
     // -------------------------------------------------------------------------
     toolbar = ToolbarBuilder::create()
         ->title("Security & Privacy")
-        ->subtitle(SECTION_SUBTITLES[0])
+        ->subtitle(SECTION_SUBTITLES[default_tab])
         ->titleAlignment(TitleAlignment::Center)
         ->onRefresh(refresh_fn)
         ->onClose([&window, engine]() {
@@ -148,7 +202,7 @@ int main(int argc, char** argv) {
     // 2. VIEW PAGER PAGES (7 DEDICATED SECTIONS)
     // =========================================================================
     pager = ViewPagerBuilder::create()
-        ->currentPage(0)
+        ->currentPage(default_tab)
         ->onPageChanged([&](int old_idx, int new_idx) {
             if (bottom_nav && bottom_nav->get_selected_index() != new_idx) {
                 bottom_nav->set_selected_index(new_idx);
@@ -211,7 +265,7 @@ int main(int argc, char** argv) {
         ->addItem("Hardware", "computer")
         ->addItem("Sandbox", "package-x-generic")
         ->addItem("Testbed", "applications-utilities")
-        ->selectedIndex(0)
+        ->selectedIndex(default_tab)
         ->pillSize(44, 26)
         ->cornerRadius(24)
         ->barHeight(56)
@@ -280,6 +334,10 @@ int main(int argc, char** argv) {
     if (!window) {
         std::cerr << "[miqusecure] Failed to create Wayland window.\n";
         return 1;
+    }
+
+    if (default_tab > 0) {
+        load_page_if_needed(default_tab);
     }
 
     window->show();
