@@ -40,7 +40,7 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
 
     auto hero_badge = ui::make_icon_badge(
-        "✈️",
+        "airplane-mode",
         m_info.airplane_mode ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant,
         32, 8, 12
     );
@@ -124,7 +124,7 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     wifi_row->set_margin(4, 6, 4, 6);
 
-    auto wifi_badge = ui::make_icon_badge("📶", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto wifi_badge = ui::make_icon_badge("network-wireless", auto_cfg->colors.surface_variant, 32, 8, 12);
     wifi_row->add_view(wifi_badge);
 
     auto wifi_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -177,7 +177,7 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     bt_row->set_margin(4, 6, 4, 6);
 
-    auto bt_badge = ui::make_icon_badge("ᛒ", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto bt_badge = ui::make_icon_badge("bluetooth", auto_cfg->colors.surface_variant, 32, 8, 12);
     bt_row->add_view(bt_badge);
 
     auto bt_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -252,7 +252,7 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     mic_row->set_margin(4, 6, 4, 6);
 
-    auto mic_badge = ui::make_icon_badge("🎙️", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto mic_badge = ui::make_icon_badge("audio-input-microphone", auto_cfg->colors.surface_variant, 32, 8, 12);
     mic_row->add_view(mic_badge);
 
     auto mic_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -305,7 +305,7 @@ HardwareView::HardwareView(const HardwareInfo& info, std::function<void()> on_ch
     ));
     cam_row->set_margin(4, 6, 4, 6);
 
-    auto cam_badge = ui::make_icon_badge("📷", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto cam_badge = ui::make_icon_badge("camera-web", auto_cfg->colors.surface_variant, 32, 8, 12);
     cam_row->add_view(cam_badge);
 
     auto cam_col = std::make_shared<LinearLayout>(Orientation::Vertical);

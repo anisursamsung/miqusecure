@@ -10,7 +10,7 @@ namespace ui {
 
 // Creates a refined iOS/Win11 squircle icon badge plate using official toolkit colors
 inline std::shared_ptr<miqu::FrameLayout> make_icon_badge(
-    const std::string& icon_text,
+    const std::string& icon_name_or_text,
     const miqu::Color& bg_color = miqu::Color::transparent(),
     int size = 32,
     int radius = 8,
@@ -27,17 +27,35 @@ inline std::shared_ptr<miqu::FrameLayout> make_icon_badge(
     ));
     frame->set_margin(0, 0, margin_right, 0);
 
-    auto tv = miqu::TextViewBuilder::create()
-        ->text(icon_text)
-        ->h3()
-        ->build();
-    tv->set_layout_params(miqu::LayoutParams(
-        static_cast<int>(miqu::LayoutDimension::WrapContent),
-        static_cast<int>(miqu::LayoutDimension::WrapContent),
-        miqu::Gravity::Center
-    ));
+    std::string resolved = miqu::ImageView::resolve_icon_path(icon_name_or_text);
+    bool is_img = !resolved.empty() || icon_name_or_text.starts_with('/') || icon_name_or_text.ends_with(".png") || icon_name_or_text.ends_with(".svg");
 
-    frame->add_view(tv);
+    if (is_img) {
+        int icon_sz = std::max(14, size - 12);
+        auto img = miqu::ImageViewBuilder::create()
+            ->imageResource(!resolved.empty() ? resolved : icon_name_or_text)
+            ->targetSize(icon_sz)
+            ->fitMode(miqu::FitMode::Contain)
+            ->build();
+        img->set_layout_params(miqu::LayoutParams(
+            icon_sz,
+            icon_sz,
+            miqu::Gravity::Center
+        ));
+        frame->add_view(img);
+    } else {
+        auto tv = miqu::TextViewBuilder::create()
+            ->text(icon_name_or_text)
+            ->h3()
+            ->build();
+        tv->set_layout_params(miqu::LayoutParams(
+            static_cast<int>(miqu::LayoutDimension::WrapContent),
+            static_cast<int>(miqu::LayoutDimension::WrapContent),
+            miqu::Gravity::Center
+        ));
+        frame->add_view(tv);
+    }
+
     return frame;
 }
 

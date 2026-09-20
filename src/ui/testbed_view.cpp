@@ -39,7 +39,7 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         Gravity::CenterVertical
     ));
 
-    auto hero_badge = ui::make_icon_badge("📦", auto_cfg->colors.primary_container, 32, 8, 12);
+    auto hero_badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.primary_container, 32, 8, 12);
     status_row->add_view(hero_badge);
 
     auto info_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -155,7 +155,7 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         Gravity::Top
     ));
 
-    auto g_badge = ui::make_icon_badge("💡", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto g_badge = ui::make_icon_badge("dialog-information", auto_cfg->colors.surface_variant, 32, 8, 12);
     guide_row->add_view(g_badge);
 
     auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -217,7 +217,7 @@ void TestbedView::rebuild_boxes_list() {
             Gravity::Top
         ));
 
-        auto badge = ui::make_icon_badge("📦", auto_cfg->colors.surface_variant, 32, 8, 12);
+        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 32, 8, 12);
         row->add_view(badge);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -258,7 +258,7 @@ void TestbedView::rebuild_boxes_list() {
             Gravity::CenterVertical
         ));
 
-        auto badge = ui::make_icon_badge("📦", auto_cfg->colors.surface_variant, 32, 8, 12);
+        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 32, 8, 12);
         row->add_view(badge);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -312,7 +312,7 @@ void TestbedView::rebuild_boxes_list() {
         row_top->set_margin(4, 4, 4, 8);
 
         auto auto_cfg = Config::get();
-        auto box_badge = ui::make_icon_badge("📦", auto_cfg->colors.surface_variant, 32, 8, 12);
+        auto box_badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 32, 8, 12);
         row_top->add_view(box_badge);
 
         auto name_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -530,7 +530,7 @@ void TestbedView::rebuild_boxes_list() {
                 app_row->set_margin(0, 4, 0, 4);
 
                 auto auto_cfg = Config::get();
-                auto a_badge = ui::make_icon_badge("⚡", auto_cfg->colors.surface_variant, 24, 6, 8);
+                auto a_badge = ui::make_icon_badge("utilities-terminal", auto_cfg->colors.surface_variant, 24, 6, 8);
                 app_row->add_view(a_badge);
 
                 auto a_col = std::make_shared<LinearLayout>(Orientation::Vertical);

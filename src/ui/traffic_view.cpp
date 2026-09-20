@@ -11,14 +11,14 @@ static std::string get_proc_icon(const std::string& name) {
     std::string lower = name;
     for (char& c : lower) c = std::tolower(c);
 
-    if (lower.find("firefox") != std::string::npos || lower.find("browser") != std::string::npos) return "🦊";
-    if (lower.find("music") != std::string::npos || lower.find("mpd") != std::string::npos || lower.find("spotify") != std::string::npos) return "🎵";
-    if (lower.find("antigravity") != std::string::npos || lower.find("code") != std::string::npos) return "⚡";
-    if (lower.find("server") != std::string::npos || lower.find("daemon") != std::string::npos) return "⚙️";
-    if (lower.find("waybar") != std::string::npos || lower.find("miqu") != std::string::npos) return "💻";
-    if (lower.find("curl") != std::string::npos || lower.find("wget") != std::string::npos) return "📦";
-    if (lower.find("systemd") != std::string::npos) return "🛡️";
-    return "🌐";
+    if (lower.find("firefox") != std::string::npos || lower.find("browser") != std::string::npos) return "firefox";
+    if (lower.find("music") != std::string::npos || lower.find("mpd") != std::string::npos || lower.find("spotify") != std::string::npos) return "audio-x-generic";
+    if (lower.find("antigravity") != std::string::npos || lower.find("code") != std::string::npos) return "utilities-terminal";
+    if (lower.find("server") != std::string::npos || lower.find("daemon") != std::string::npos) return "preferences-system";
+    if (lower.find("waybar") != std::string::npos || lower.find("miqu") != std::string::npos) return "computer";
+    if (lower.find("curl") != std::string::npos || lower.find("wget") != std::string::npos) return "package-x-generic";
+    if (lower.find("systemd") != std::string::npos) return "security-high";
+    return "network-workgroup";
 }
 
 TrafficView::TrafficView(const TrafficReport& traffic)
@@ -79,10 +79,10 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         return card;
     };
 
-    metrics_row->add_view(make_metric_card("🌐", auto_cfg->colors.surface_variant, "Sockets", m_outbound_badge));
-    metrics_row->add_view(make_metric_card("🛡️", auto_cfg->colors.primary_container, "TLS Secure", m_encrypted_badge));
-    metrics_row->add_view(make_metric_card("⚡", auto_cfg->colors.surface_variant, "Throughput", m_bandwidth_badge));
-    metrics_row->add_view(make_metric_card("📦", auto_cfg->colors.surface_variant, "Apps", m_apps_badge));
+    metrics_row->add_view(make_metric_card("network-wired", auto_cfg->colors.surface_variant, "Sockets", m_outbound_badge));
+    metrics_row->add_view(make_metric_card("security-high", auto_cfg->colors.primary_container, "TLS Secure", m_encrypted_badge));
+    metrics_row->add_view(make_metric_card("utilities-system-monitor", auto_cfg->colors.surface_variant, "Throughput", m_bandwidth_badge));
+    metrics_row->add_view(make_metric_card("package-x-generic", auto_cfg->colors.surface_variant, "Apps", m_apps_badge));
     m_layout->add_view(metrics_row);
 
     // =========================================================================

@@ -40,7 +40,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
     ));
 
     auto hero_badge = ui::make_icon_badge(
-        "🛡️",
+        "security-high",
         m_info.active ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant,
         40, 10, 14
     );
@@ -137,7 +137,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
     ));
     mode_row->set_margin(4, 6, 4, 6);
 
-    auto mode_badge = ui::make_icon_badge("🛡️", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto mode_badge = ui::make_icon_badge("security-high", auto_cfg->colors.surface_variant, 32, 8, 12);
     mode_row->add_view(mode_badge);
 
     auto mode_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -241,7 +241,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
     ));
     port_top->set_margin(4, 4, 4, 8);
 
-    auto port_badge = ui::make_icon_badge("🔓", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto port_badge = ui::make_icon_badge("security-low", auto_cfg->colors.surface_variant, 32, 8, 12);
     port_top->add_view(port_badge);
 
     auto port_text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -422,25 +422,25 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
     };
 
     // SSH Row
-    serv_list->add_view(make_service_row("💻", "Remote Terminal (SSH - 22)",
+    serv_list->add_view(make_service_row("utilities-terminal", "Remote Terminal (SSH - 22)",
         "Allow secure command-line login from trusted machines across the network.",
         "⚙ OpenSSH Daemon • Port 22/tcp",
         m_info.ssh_allowed, "22", m_switch_ssh));
 
     // Local Web Dev Row
-    serv_list->add_view(make_service_row("🌐", "Local Web Dev (8080)",
+    serv_list->add_view(make_service_row("network-workgroup", "Local Web Dev (8080)",
         "Allow testing local web servers on this machine from other devices.",
         "⚙ HTTP Web Server • Port 8080/tcp",
         m_info.web_dev_allowed, "8080", m_switch_web));
 
     // Syncthing Row
-    serv_list->add_view(make_service_row("🔄", "Syncthing File Sync (22000)",
+    serv_list->add_view(make_service_row("view-refresh", "Syncthing File Sync (22000)",
         "Allow continuous peer-to-peer folder and document synchronization.",
         "⚙ Syncthing Protocol • Port 22000/tcp,udp",
         m_info.syncthing_allowed, "22000", m_switch_syncthing));
 
     // Samba Row
-    serv_list->add_view(make_service_row("📁", "LAN File Share (Samba - 445)",
+    serv_list->add_view(make_service_row("folder", "LAN File Share (Samba - 445)",
         "Allow Windows and Linux network folder and document sharing.",
         "⚙ SMB/CIFS Network Share • Port 445/tcp",
         m_info.samba_allowed, "445", m_switch_samba));
@@ -590,7 +590,7 @@ void FirewallView::rebuild_rules_list() {
 
         bool is_allow = (rule.action == "ALLOW");
         auto r_badge = ui::make_icon_badge(
-            is_allow ? "✔" : "✖",
+            is_allow ? "emblem-default" : "dialog-error",
             is_allow ? cfg->colors.primary_container : cfg->colors.surface_variant,
             32, 8, 12
         );

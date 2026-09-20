@@ -37,7 +37,7 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
         Gravity::CenterVertical
     ));
 
-    auto hero_badge = ui::make_icon_badge("🛡️", auto_cfg->colors.primary_container, 32, 8, 12);
+    auto hero_badge = ui::make_icon_badge("security-high", auto_cfg->colors.primary_container, 32, 8, 12);
     hero_row->add_view(hero_badge);
 
     auto hero_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -140,13 +140,13 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
 
     // Landlock
     std::string landlock_status = m_info.landlock_active ? "✔ Active" : "○ Inactive";
-    list_col->add_view(make_module_row("🏰", "Landlock LSM (Process Isolation)",
+    list_col->add_view(make_module_row("security-medium", "Landlock LSM (Process Isolation)",
         "Allows apps to voluntarily restrict their own filesystem and internet access without requiring root passwords.",
         landlock_status, m_info.landlock_active));
 
     // YAMA
     std::string yama_status = m_info.yama_active ? "✔ Protected" : "○ Inactive";
-    list_col->add_view(make_module_row("🔒", "YAMA Memory Guard (Anti-Spyware)",
+    list_col->add_view(make_module_row("security-low", "YAMA Memory Guard (Anti-Spyware)",
         "Stops background malware or untrusted programs from reading browser passwords or debugging other running apps.",
         yama_status, m_info.yama_active));
 
@@ -155,7 +155,7 @@ SandboxView::SandboxView(const LsmInfo& info) : m_info(info) {
     if (m_info.apparmor_active) {
         aa_status = "✔ Active (" + std::to_string(m_info.enforcing_profiles) + " enforcing)";
     }
-    list_col->add_view(make_module_row("🛡️", "AppArmor Profiles",
+    list_col->add_view(make_module_row("security-high", "AppArmor Profiles",
         "Mandatory system confinement profiles restricting application directories and network capabilities.",
         aa_status, m_info.apparmor_active));
 
@@ -263,7 +263,8 @@ void SandboxView::rebuild_flatpak_section() {
                 ));
                 a_row->set_margin(4, 6, 4, 6);
 
-                auto a_badge = ui::make_icon_badge("📦", cfg->colors.surface_variant, 32, 8, 12);
+                std::string app_icon = !miqu::ImageView::resolve_icon_path(app.id).empty() ? app.id : "package-x-generic";
+                auto a_badge = ui::make_icon_badge(app_icon, cfg->colors.surface_variant, 32, 8, 12);
                 a_row->add_view(a_badge);
 
                 auto col = std::make_shared<LinearLayout>(Orientation::Vertical);

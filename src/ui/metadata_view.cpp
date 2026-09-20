@@ -41,7 +41,7 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
         Gravity::CenterVertical
     ));
 
-    auto hero_badge = ui::make_icon_badge("🧹", auto_cfg->colors.primary_container, 32, 8, 12);
+    auto hero_badge = ui::make_icon_badge("edit-clear", auto_cfg->colors.primary_container, 32, 8, 12);
     hero_row->add_view(hero_badge);
 
     auto hero_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -135,7 +135,7 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
     ));
     m_top->set_margin(4, 4, 4, 8);
 
-    auto m_badge = ui::make_icon_badge("🧼", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto m_badge = ui::make_icon_badge("edit-clear", auto_cfg->colors.surface_variant, 32, 8, 12);
     m_top->add_view(m_badge);
 
     auto m_text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -341,25 +341,25 @@ CleanerView::CleanerView(const CleanerInfo& info, std::function<void()> on_chang
     };
 
     // 1. Thumbnails
-    cache_list->add_view(make_cache_row("🖼️", "Thumbnail Cache",
+    cache_list->add_view(make_cache_row("folder-pictures", "Thumbnail Cache",
         "Purge image and video thumbnail preview files.",
         m_info.thumbnails_size, m_thumb_size_lbl,
         [](std::string& log) { return SecurityBackend::clean_thumbnails(log); }));
 
     // 2. Browser Caches
-    cache_list->add_view(make_cache_row("🌐", "Browser Caches",
+    cache_list->add_view(make_cache_row("network-workgroup", "Browser Caches",
         "Purge Chrome, Firefox & Chromium temporary offline caches.",
         m_info.browser_cache_size, m_browser_size_lbl,
         [](std::string& log) { return SecurityBackend::clean_browser_caches(log); }));
 
     // 3. Trash & Temp
-    cache_list->add_view(make_cache_row("🗑️", "Trash Bin & Temp",
+    cache_list->add_view(make_cache_row("user-trash", "Trash Bin & Temp",
         "Empty deleted trash files and shader cache directories.",
         m_info.trash_size, m_trash_size_lbl,
         [](std::string& log) { return SecurityBackend::clean_trash_and_temp(log); }));
 
     // 4. Shell History
-    cache_list->add_view(make_cache_row("📜", "Shell History",
+    cache_list->add_view(make_cache_row("utilities-terminal", "Shell History",
         "Clear bash, zsh & terminal command prompt histories.",
         m_info.bash_history_size, m_history_size_lbl,
         [](std::string& log) { return SecurityBackend::clean_shell_history(log); }));

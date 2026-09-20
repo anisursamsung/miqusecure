@@ -40,7 +40,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
     ));
 
     auto hero_badge = ui::make_icon_badge(
-        m_info.encrypted ? "🌐" : "⚠️",
+        m_info.encrypted ? "network-vpn" : "dialog-warning",
         m_info.encrypted ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant,
         32, 8, 12
     );
@@ -214,28 +214,28 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
     bool is_cloudflare = m_info.active_provider.find("Cloudflare") != std::string::npos;
 
     // 1. Quad9
-    res_list->add_view(make_resolver_row("🛡️", "Quad9 Threat Shield",
+    res_list->add_view(make_resolver_row("security-high", "Quad9 Threat Shield",
         "Automated threat, phishing & ransomware protection via Swiss non-profit privacy foundation.",
         "⚙ Primary: 9.9.9.9 | Secondary: 149.112.112.112 | DNSSEC: Enforced",
         "9.9.9.9", "149.112.112.112",
         is_quad9, m_switch_quad9));
 
     // 2. AdGuard
-    res_list->add_view(make_resolver_row("🚫", "AdGuard Ad-Block",
+    res_list->add_view(make_resolver_row("security-medium", "AdGuard Ad-Block",
         "Network-level blocking of advertising servers, tracking scripts, and telemetry domains.",
         "⚙ Primary: 94.140.14.14 | Secondary: 94.140.15.15 | Filter: Default",
         "94.140.14.14", "94.140.15.15",
         is_adguard, m_switch_adguard));
 
     // 3. Mullvad
-    res_list->add_view(make_resolver_row("🔒", "Mullvad Privacy",
+    res_list->add_view(make_resolver_row("security-low", "Mullvad Privacy",
         "Strict Swedish privacy jurisdiction with zero logs, DNSSEC, and QNAME minimization.",
         "⚙ Primary: 194.242.2.4 | Secondary: 194.242.2.5 | Logs: Zero-retention",
         "194.242.2.4", "194.242.2.5",
         is_mullvad, m_switch_mullvad));
 
     // 4. Cloudflare
-    res_list->add_view(make_resolver_row("⚡", "Cloudflare 1.1.1.1",
+    res_list->add_view(make_resolver_row("network-workgroup", "Cloudflare 1.1.1.1",
         "Fastest worldwide response times with regular independent public privacy audits.",
         "⚙ Primary: 1.1.1.1 | Secondary: 1.0.0.1 | Speed: Ultra-low latency",
         "1.1.1.1", "1.0.0.1",
@@ -271,7 +271,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
     ));
     c_top->set_margin(4, 4, 4, 8);
 
-    auto c_badge = ui::make_icon_badge("⚙", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto c_badge = ui::make_icon_badge("preferences-system", auto_cfg->colors.surface_variant, 32, 8, 12);
     c_top->add_view(c_badge);
 
     auto c_text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
