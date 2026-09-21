@@ -18,31 +18,24 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(18, 14);
+    m_layout->set_padding(22, 18);
 
     // =========================================================================
-    // 1. MASTER DNS PROTECTION HERO CARD (Windows Security / iOS Style)
+    // 1. MASTER DNS PROTECTION HERO (Direct Placement)
     // =========================================================================
     auto auto_cfg = Config::get();
-    auto hero_card = std::make_shared<CardView>();
-    hero_card->set_padding(14, 12);
-    hero_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    hero_card->set_margin(0, 0, 0, 14);
-
     auto hero_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     hero_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
+    hero_row->set_margin(0, 4, 0, 20);
 
     auto hero_badge = ui::make_icon_badge(
         m_info.encrypted ? "network-vpn" : "dialog-warning",
         m_info.encrypted ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant,
-        32, 8, 12
+        34, 8, 14
     );
     hero_row->add_view(hero_badge);
 
@@ -58,6 +51,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         ->h2()
         ->bold(true)
         ->build();
+    m_status_lbl->set_margin(0, 0, 0, 4);
 
     std::string desc_text = m_info.encrypted ?
         "Encrypted DNS lookups shield web navigation from ISP surveillance and network hijacking." :
@@ -70,7 +64,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    m_status_desc->set_margin(0, 4, 0, 0);
+    m_status_desc->set_margin(0, 2, 0, 0);
 
     hero_col->add_view(m_status_lbl);
     hero_col->add_view(m_status_desc);
@@ -110,8 +104,8 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         }).detach();
     });
     hero_row->add_view(m_switch_master);
-    hero_card->add_view(hero_row);
-    m_layout->add_view(hero_card);
+    m_layout->add_view(hero_row);
+
     // Docked 3px progress bar
     m_progress_bar = ProgressBarBuilder::create()
         ->style(ProgressBarStyle::Linear)
@@ -122,32 +116,27 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         static_cast<int>(LayoutDimension::MatchParent),
         3
     ));
-    m_progress_bar->set_margin(0, 0, 0, 12);
+    m_progress_bar->set_margin(0, 0, 0, 16);
     m_progress_bar->set_visibility(Visibility::Invisible);
     m_layout->add_view(m_progress_bar);
 
     // =========================================================================
-    // 2. 1-CLICK TRUSTED PRIVACY RESOLVERS (Grouped Card Container)
+    // 2. 1-CLICK TRUSTED PRIVACY RESOLVERS (Direct Placement)
     // =========================================================================
-    m_layout->add_view(ui::make_section_header("PRIVACY & SECURITY RESOLVERS"));
-
-    auto res_card = std::make_shared<CardView>();
-    res_card->set_padding(14, 10);
-    res_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    res_card->set_margin(0, 0, 0, 14);
+    auto sec_res_hdr = ui::make_section_header("PRIVACY & SECURITY RESOLVERS");
+    sec_res_hdr->set_margin(0, 18, 0, 12);
+    m_layout->add_view(sec_res_hdr);
 
     auto res_list = std::make_shared<LinearLayout>(Orientation::Vertical);
     res_list->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    res_list->set_margin(0, 4, 0, 20);
 
     auto make_resolver_row = [this](const std::string& icon,
                                     const std::string& title,
-                                    const std::string& desc, const std::string& tech,
+                                    const std::string& desc,
                                     const std::string& primary_ip, const std::string& secondary_ip,
                                     bool is_active, std::shared_ptr<Switch>& out_switch) {
         auto cfg = Config::get();
@@ -157,9 +146,9 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::CenterVertical
         ));
-        row->set_margin(4, 6, 4, 6);
+        row->set_margin(0, 10, 0, 10);
 
-        auto badge = ui::make_icon_badge(icon, is_active ? cfg->colors.primary_container : cfg->colors.surface_variant, 32, 8, 12);
+        auto badge = ui::make_icon_badge(icon, cfg->colors.surface_variant, 34, 8, 14);
         row->add_view(badge);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -167,21 +156,26 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
 
         auto title_tv = TextViewBuilder::create()->text(title)->bold(true)->build();
         auto desc_tv = TextViewBuilder::create()->text(desc)->caption()->muted()->multiline(true)->ellipsize(false)->build();
-        desc_tv->set_margin(0, 2, 0, 2);
-        auto tech_tv = TextViewBuilder::create()->text(tech)->caption()->muted()->multiline(true)->ellipsize(false)->build();
+        desc_tv->set_margin(0, 2, 0, 0);
 
         col->add_view(title_tv);
         col->add_view(desc_tv);
-        col->add_view(tech_tv);
         row->add_view(col);
 
-        auto sw = SwitchBuilder::create()->checked(is_active)->build();
+        auto sw = SwitchBuilder::create()
+            ->checked(is_active)
+            ->build();
+        sw->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::WrapContent),
+            static_cast<int>(LayoutDimension::WrapContent),
+            Gravity::CenterVertical
+        ));
         std::weak_ptr<Switch> weak_sw = sw;
         sw->set_on_checked_changed_listener([this, primary_ip, secondary_ip, weak_sw](bool checked) {
             if (m_updating_ui) return;
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-            std::thread([this, primary_ip, secondary_ip, checked, weak_sw]() {
+            std::thread([this, checked, primary_ip, secondary_ip, weak_sw]() {
                 bool ok = false;
                 if (checked) {
                     ok = SecurityBackend::apply_dns(primary_ip, secondary_ip);
@@ -195,9 +189,11 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
                         if (ok) {
                             if (m_on_changed) m_on_changed();
                         } else {
+                            m_updating_ui = true;
                             if (auto s = weak_sw.lock()) {
                                 s->set_checked(!checked);
                             }
+                            m_updating_ui = false;
                         }
                     });
                 }
@@ -214,54 +210,44 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
     bool is_cloudflare = m_info.active_provider.find("Cloudflare") != std::string::npos;
 
     // 1. Quad9
-    res_list->add_view(make_resolver_row("security-high", "Quad9 Threat Shield",
-        "Automated threat, phishing & ransomware protection via Swiss non-profit privacy foundation.",
-        "⚙ Primary: 9.9.9.9 | Secondary: 149.112.112.112 | DNSSEC: Enforced",
+    res_list->add_view(make_resolver_row("security-high", "Quad9 (Malware Block)",
+        "Encrypted DNS blocking malicious phishing and malware domains (9.9.9.9).",
         "9.9.9.9", "149.112.112.112",
         is_quad9, m_switch_quad9));
 
     // 2. AdGuard
-    res_list->add_view(make_resolver_row("security-medium", "AdGuard Ad-Block",
-        "Network-level blocking of advertising servers, tracking scripts, and telemetry domains.",
-        "⚙ Primary: 94.140.14.14 | Secondary: 94.140.15.15 | Filter: Default",
+    res_list->add_view(make_resolver_row("dialog-cancel", "AdGuard DNS (Ad Block)",
+        "System-wide sinkhole blocking advertisements and tracking telemetry (94.140.14.14).",
         "94.140.14.14", "94.140.15.15",
         is_adguard, m_switch_adguard));
 
     // 3. Mullvad
-    res_list->add_view(make_resolver_row("security-low", "Mullvad Privacy",
-        "Strict Swedish privacy jurisdiction with zero logs, DNSSEC, and QNAME minimization.",
-        "⚙ Primary: 194.242.2.4 | Secondary: 194.242.2.5 | Logs: Zero-retention",
-        "194.242.2.4", "194.242.2.5",
+    res_list->add_view(make_resolver_row("network-vpn", "Mullvad DNS (No-Log)",
+        "Privacy-first encrypted resolver with strict zero logging (194.242.2.3).",
+        "194.242.2.3", "194.242.2.4",
         is_mullvad, m_switch_mullvad));
 
     // 4. Cloudflare
-    res_list->add_view(make_resolver_row("network-workgroup", "Cloudflare 1.1.1.1",
-        "Fastest worldwide response times with regular independent public privacy audits.",
-        "⚙ Primary: 1.1.1.1 | Secondary: 1.0.0.1 | Speed: Ultra-low latency",
+    res_list->add_view(make_resolver_row("network-wireless", "Cloudflare (High Speed)",
+        "Ultra-low latency public resolver with privacy auditing (1.1.1.1).",
         "1.1.1.1", "1.0.0.1",
         is_cloudflare, m_switch_cloudflare));
 
-    res_card->add_view(res_list);
-    m_layout->add_view(res_card);
+    m_layout->add_view(res_list);
 
     // =========================================================================
-    // 3. CUSTOM DNS SERVER CARD (Unified Grouped Card)
+    // 3. CUSTOM DNS SERVER (Direct Placement)
     // =========================================================================
-    m_layout->add_view(ui::make_section_header("CUSTOM NAMESERVERS"));
-
-    auto custom_card = std::make_shared<CardView>();
-    custom_card->set_padding(14, 10);
-    custom_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    custom_card->set_margin(0, 0, 0, 14);
+    auto sec_custom_hdr = ui::make_section_header("CUSTOM NAMESERVERS");
+    sec_custom_hdr->set_margin(0, 18, 0, 12);
+    m_layout->add_view(sec_custom_hdr);
 
     auto custom_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     custom_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    custom_col->set_margin(0, 4, 0, 20);
 
     auto c_top = std::make_shared<LinearLayout>(Orientation::Horizontal);
     c_top->set_layout_params(LayoutParams(
@@ -269,9 +255,9 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    c_top->set_margin(4, 4, 4, 8);
+    c_top->set_margin(0, 2, 0, 12);
 
-    auto c_badge = ui::make_icon_badge("preferences-system", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto c_badge = ui::make_icon_badge("preferences-system", auto_cfg->colors.surface_variant, 34, 8, 14);
     c_top->add_view(c_badge);
 
     auto c_text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -284,7 +270,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    c_desc->set_margin(0, 2, 0, 0);
+    c_desc->set_margin(0, 3, 0, 0);
     c_text_col->add_view(c_name);
     c_text_col->add_view(c_desc);
     c_top->add_view(c_text_col);
@@ -297,7 +283,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    form_row->set_margin(4, 6, 4, 6);
+    form_row->set_margin(0, 4, 0, 8);
 
     m_input_primary = EditTextBuilder::create()
         ->hint("Primary IP (e.g. 1.1.1.1)")
@@ -308,7 +294,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         static_cast<int>(LayoutDimension::WrapContent),
         1.0f
     ));
-    m_input_primary->set_margin(0, 0, 10, 0);
+    m_input_primary->set_margin(0, 0, 12, 0);
     form_row->add_view(m_input_primary);
 
     m_input_secondary = EditTextBuilder::create()
@@ -320,7 +306,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         static_cast<int>(LayoutDimension::WrapContent),
         1.0f
     ));
-    m_input_secondary->set_margin(0, 0, 10, 0);
+    m_input_secondary->set_margin(0, 0, 12, 0);
     form_row->add_view(m_input_secondary);
 
     auto btn_apply_custom = ButtonBuilder::create()
@@ -361,29 +347,24 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    custom_note->set_margin(4, 4, 4, 0);
+    custom_note->set_margin(0, 4, 0, 0);
     custom_col->add_view(custom_note);
 
-    custom_card->add_view(custom_col);
-    m_layout->add_view(custom_card);
+    m_layout->add_view(custom_col);
 
     // =========================================================================
-    // 4. EDUCATIONAL "WHAT IS DNS?" (Soft Tinted, Borderless Callout)
+    // 4. EDUCATIONAL "WHAT IS DNS?" (Direct Placement Callout)
     // =========================================================================
-    auto guide_card = std::make_shared<FrameLayout>();
-    guide_card->set_background_color(auto_cfg->colors.surface_variant);
-    guide_card->set_corner_radius(10);
-    guide_card->set_padding(14, 10);
-    guide_card->set_layout_params(LayoutParams(
+    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    guide_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    guide_card->set_margin(0, 4, 0, 10);
+    guide_col->set_margin(0, 18, 0, 24);
 
-    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    auto g_title = TextViewBuilder::create()->text("💡 What is DNS & Why Does It Matter?")->bold(true)->build();
+    auto g_title = TextViewBuilder::create()->text("💡 What is DNS?")->bold(true)->build();
     auto g_desc = TextViewBuilder::create()
-        ->text("DNS is the directory of the internet. When querying an address like wikipedia.org, DNS looks up the exact server IP to connect to.\n\nBy default, the Internet Service Provider (ISP) resolves these lookups, which allows recording and logging every website visited—even in private browsing mode. Using a trusted encrypted resolver like Quad9 or Cloudflare shields network queries from ISP inspection and automatically blocks malicious fraud and phishing domains.")
+        ->text("Translates website names into IP addresses. Encrypted resolvers shield your queries from ISP tracking and block malicious sites.")
         ->caption()
         ->muted()
         ->multiline(true)
@@ -392,8 +373,7 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
     g_desc->set_margin(0, 4, 0, 0);
     guide_col->add_view(g_title);
     guide_col->add_view(g_desc);
-    guide_card->add_view(guide_col);
-    m_layout->add_view(guide_card);
+    m_layout->add_view(guide_col);
 
     set_content_view(m_layout);
 }

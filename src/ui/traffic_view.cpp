@@ -33,10 +33,10 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(18, 14);
+    m_layout->set_padding(22, 18);
 
     // =========================================================================
-    // 1. TOP METRIC CARDS STRIP (Windows Security / iOS Metric Cards)
+    // 1. TOP METRIC STRIP (Direct Placement)
     // =========================================================================
     auto auto_cfg = Config::get();
     auto metrics_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
@@ -44,19 +44,17 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    metrics_row->set_margin(0, 0, 0, 14);
+    metrics_row->set_margin(0, 4, 0, 20);
 
-    auto make_metric_card = [](const std::string& icon, const Color& badge_color, const std::string& label, std::shared_ptr<TextView>& out_val) {
-        auto card = std::make_shared<CardView>();
-        card->set_layout_params(LayoutParams(
+    auto make_metric_item = [](const std::string& icon, const Color& badge_color, const std::string& label, std::shared_ptr<TextView>& out_val) {
+        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
+        col->set_layout_params(LayoutParams(
             0,
             static_cast<int>(LayoutDimension::WrapContent),
             1.0f
         ));
-        card->set_padding(12, 10);
-        card->set_margin(4, 0, 4, 0);
+        col->set_margin(4, 0, 4, 0);
 
-        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
         auto hdr_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
         hdr_row->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
@@ -75,33 +73,25 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         out_val->set_margin(0, 4, 0, 0);
         col->add_view(out_val);
 
-        card->add_view(col);
-        return card;
+        return col;
     };
 
-    metrics_row->add_view(make_metric_card("network-wired", auto_cfg->colors.surface_variant, "Sockets", m_outbound_badge));
-    metrics_row->add_view(make_metric_card("security-high", auto_cfg->colors.primary_container, "TLS Secure", m_encrypted_badge));
-    metrics_row->add_view(make_metric_card("utilities-system-monitor", auto_cfg->colors.surface_variant, "Throughput", m_bandwidth_badge));
-    metrics_row->add_view(make_metric_card("package-x-generic", auto_cfg->colors.surface_variant, "Apps", m_apps_badge));
+    metrics_row->add_view(make_metric_item("network-wired", auto_cfg->colors.surface_variant, "Sockets", m_outbound_badge));
+    metrics_row->add_view(make_metric_item("security-high", auto_cfg->colors.primary_container, "TLS Secure", m_encrypted_badge));
+    metrics_row->add_view(make_metric_item("utilities-system-monitor", auto_cfg->colors.surface_variant, "Throughput", m_bandwidth_badge));
+    metrics_row->add_view(make_metric_item("package-x-generic", auto_cfg->colors.surface_variant, "Apps", m_apps_badge));
     m_layout->add_view(metrics_row);
 
     // =========================================================================
-    // 2. FILTER & CONTROLS BAR
+    // 2. FILTER & CONTROLS BAR (Direct Placement)
     // =========================================================================
-    auto filter_card = std::make_shared<CardView>();
-    filter_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    filter_card->set_padding(12, 10);
-    filter_card->set_margin(0, 0, 0, 14);
-
     auto filter_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     filter_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
+    filter_row->set_margin(0, 4, 0, 20);
 
     std::vector<std::string> scope_items = {
         "🌐 Internet Only",
@@ -147,8 +137,7 @@ TrafficView::TrafficView(const TrafficReport& traffic)
     live_badge->set_margin(10, 0, 4, 0);
     filter_row->add_view(live_badge);
 
-    filter_card->add_view(filter_row);
-    m_layout->add_view(filter_card);
+    m_layout->add_view(filter_row);
 
     // =========================================================================
     // 3. RECENT REQUEST ACTIVITY STREAM
@@ -158,7 +147,7 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_feed_container->set_margin(0, 0, 0, 14);
+    m_feed_container->set_margin(0, 0, 0, 20);
     m_layout->add_view(m_feed_container);
 
     // =========================================================================
@@ -169,27 +158,22 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_conn_container->set_margin(0, 0, 0, 14);
+    m_conn_container->set_margin(0, 0, 0, 20);
     m_layout->add_view(m_conn_container);
 
     // =========================================================================
-    // 5. EDUCATIONAL CALLOUT (Soft Tinted Card)
+    // 5. EDUCATIONAL CALLOUT (Direct Placement)
     // =========================================================================
-    auto cfg = Config::get();
-    auto guide_card = std::make_shared<FrameLayout>();
-    guide_card->set_background_color(cfg->colors.surface_variant);
-    guide_card->set_corner_radius(10);
-    guide_card->set_padding(14, 10);
-    guide_card->set_layout_params(LayoutParams(
+    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    guide_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    guide_card->set_margin(0, 4, 0, 10);
+    guide_col->set_margin(0, 18, 0, 24);
 
-    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    auto g_title = TextViewBuilder::create()->text("💡 Why Monitor Live Network Traffic?")->bold(true)->build();
+    auto g_title = TextViewBuilder::create()->text("💡 Why Monitor Network Traffic?")->bold(true)->build();
     auto g_desc = TextViewBuilder::create()
-        ->text("Even when the screen is locked or idle, background processes, telemetry daemons, and browser extensions regularly establish outbound connections to remote servers.\n\nMonitoring live socket requests allows verifying which applications communicate over the network, detecting unexpected data transfers, and confirming that sensitive web traffic is encrypted with TLS (HTTPS / DoT).")
+        ->text("Inspect real-time socket connections to confirm background applications are communicating safely over encrypted channels.")
         ->caption()
         ->muted()
         ->multiline(true)
@@ -199,8 +183,7 @@ TrafficView::TrafficView(const TrafficReport& traffic)
 
     guide_col->add_view(g_title);
     guide_col->add_view(g_desc);
-    guide_card->add_view(guide_col);
-    m_layout->add_view(guide_card);
+    m_layout->add_view(guide_col);
 
     set_content_view(m_layout);
     update_info(m_traffic);
@@ -234,14 +217,9 @@ void TrafficView::rebuild_recent_feed() {
     if (!m_feed_container) return;
     m_feed_container->clear_views();
 
-    m_feed_container->add_view(ui::make_section_header("LIVE OUTBOUND TRAFFIC FEED"));
-
-    auto feed_card = std::make_shared<CardView>();
-    feed_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    feed_card->set_padding(14, 10);
+    auto sec_hdr = ui::make_section_header("LIVE OUTBOUND TRAFFIC FEED");
+    sec_hdr->set_margin(0, 18, 0, 12);
+    m_feed_container->add_view(sec_hdr);
 
     auto cfg = Config::get();
     auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -258,7 +236,7 @@ void TrafficView::rebuild_recent_feed() {
             ->multiline(true)
             ->ellipsize(false)
             ->build();
-        empty_tv->set_margin(4, 4, 4, 4);
+        empty_tv->set_margin(0, 4, 0, 8);
         list_col->add_view(empty_tv);
     } else {
         size_t count = std::min(m_traffic.recent_events.size(), static_cast<size_t>(10));
@@ -270,7 +248,7 @@ void TrafficView::rebuild_recent_feed() {
                 static_cast<int>(LayoutDimension::WrapContent),
                 Gravity::CenterVertical
             ));
-            row->set_margin(4, 6, 4, 6);
+            row->set_margin(0, 8, 0, 8);
 
             auto time_tv = TextViewBuilder::create()->text(event.timestamp)->caption()->muted()->build();
             time_tv->set_margin(0, 0, 8, 0);
@@ -315,8 +293,7 @@ void TrafficView::rebuild_recent_feed() {
         }
     }
 
-    feed_card->add_view(list_col);
-    m_feed_container->add_view(feed_card);
+    m_feed_container->add_view(list_col);
 }
 
 void TrafficView::rebuild_active_connections() {
@@ -354,14 +331,9 @@ void TrafficView::rebuild_active_connections() {
         filtered.push_back(conn);
     }
 
-    m_conn_container->add_view(ui::make_section_header("ACTIVE SOCKET CONNECTIONS (" + std::to_string(filtered.size()) + ")"));
-
-    auto conn_card = std::make_shared<CardView>();
-    conn_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    conn_card->set_padding(14, 10);
+    auto sec_hdr = ui::make_section_header("ACTIVE SOCKET CONNECTIONS (" + std::to_string(filtered.size()) + ")");
+    sec_hdr->set_margin(0, 18, 0, 12);
+    m_conn_container->add_view(sec_hdr);
 
     auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     list_col->set_layout_params(LayoutParams(
@@ -394,7 +366,7 @@ void TrafficView::rebuild_active_connections() {
             ->multiline(true)
             ->ellipsize(false)
             ->build();
-        empty_tv->set_margin(4, 4, 4, 4);
+        empty_tv->set_margin(0, 4, 0, 8);
         list_col->add_view(empty_tv);
     } else {
         for (size_t i = 0; i < filtered.size(); ++i) {
@@ -405,7 +377,7 @@ void TrafficView::rebuild_active_connections() {
                 static_cast<int>(LayoutDimension::WrapContent),
                 Gravity::CenterVertical
             ));
-            row->set_margin(4, 6, 4, 6);
+            row->set_margin(0, 8, 0, 8);
 
             auto badge = ui::make_icon_badge(get_proc_icon(conn.process_name), cfg->colors.surface_variant, 32, 8, 12);
             row->add_view(badge);
@@ -462,8 +434,7 @@ void TrafficView::rebuild_active_connections() {
         }
     }
 
-    conn_card->add_view(list_col);
-    m_conn_container->add_view(conn_card);
+    m_conn_container->add_view(list_col);
 }
 
 } // namespace miqusecure

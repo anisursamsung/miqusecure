@@ -18,28 +18,21 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(18, 14);
+    m_layout->set_padding(22, 18);
 
     // =========================================================================
-    // 1. TOP HEADER & STATUS HERO CARD
+    // 1. TOP HEADER & STATUS HERO (Direct Placement)
     // =========================================================================
     auto auto_cfg = Config::get();
-    auto status_card = std::make_shared<CardView>();
-    status_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    status_card->set_padding(14, 12);
-    status_card->set_margin(0, 0, 0, 14);
-
     auto status_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     status_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
+    status_row->set_margin(0, 4, 0, 16);
 
-    auto hero_badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.primary_container, 32, 8, 12);
+    auto hero_badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.primary_container, 34, 8, 14);
     status_row->add_view(hero_badge);
 
     auto info_col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -50,6 +43,7 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         ->h2()
         ->bold(true)
         ->build();
+    title_tv->set_margin(0, 0, 0, 4);
 
     std::string st_str = (m_info.distrobox_installed && m_info.podman_installed) ?
         "Podman & Distrobox ready • Run GUI and CLI apps in isolated containers" :
@@ -61,17 +55,11 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    m_status_lbl->set_margin(0, 4, 0, 0);
+    m_status_lbl->set_margin(0, 2, 0, 0);
 
     info_col->add_view(title_tv);
     info_col->add_view(m_status_lbl);
     status_row->add_view(info_col);
-
-    auto card_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    card_col->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
 
     if (m_info.distrobox_installed && m_info.podman_installed) {
         m_btn_create = ButtonBuilder::create()
@@ -100,8 +88,7 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
             ->build();
         status_row->add_view(m_btn_create);
     }
-
-    card_col->add_view(status_row);
+    m_layout->add_view(status_row);
 
     // Docked linear progress bar (3px, zero layout shift)
     m_progress_bar = ProgressBarBuilder::create()
@@ -114,16 +101,15 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         3
     ));
     m_progress_bar->set_visibility(Visibility::Invisible);
-    m_progress_bar->set_margin(0, 8, 0, 0);
-    card_col->add_view(m_progress_bar);
-
-    status_card->add_view(card_col);
-    m_layout->add_view(status_card);
+    m_progress_bar->set_margin(0, 0, 0, 16);
+    m_layout->add_view(m_progress_bar);
 
     // =========================================================================
     // 2. ACTIVE TESTBEDS SECTION
     // =========================================================================
-    m_layout->add_view(ui::make_section_header("CONFIGURED TESTBEDS"));
+    auto sec_testbeds_hdr = ui::make_section_header("CONFIGURED TESTBEDS");
+    sec_testbeds_hdr->set_margin(0, 18, 0, 12);
+    m_layout->add_view(sec_testbeds_hdr);
 
     m_boxes_container = std::make_shared<LinearLayout>(Orientation::Vertical);
     m_boxes_container->set_layout_params(LayoutParams(
@@ -134,19 +120,11 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
     m_layout->add_view(m_boxes_container);
 
     // =========================================================================
-    // 3. EDUCATIONAL CALLOUT
+    // 3. EDUCATIONAL CALLOUT (Direct Placement)
     // =========================================================================
-    m_layout->add_view(ui::make_section_header("TESTBED USAGE GUIDE"));
-
-    auto guide_card = std::make_shared<FrameLayout>();
-    guide_card->set_background_color(auto_cfg->colors.surface_variant);
-    guide_card->set_corner_radius(10);
-    guide_card->set_padding(14, 10);
-    guide_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    guide_card->set_margin(0, 4, 0, 10);
+    auto sec_guide_hdr = ui::make_section_header("TESTBED USAGE GUIDE");
+    sec_guide_hdr->set_margin(0, 18, 0, 12);
+    m_layout->add_view(sec_guide_hdr);
 
     auto guide_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     guide_row->set_layout_params(LayoutParams(
@@ -154,16 +132,17 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::Top
     ));
+    guide_row->set_margin(0, 4, 0, 24);
 
-    auto g_badge = ui::make_icon_badge("dialog-information", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto g_badge = ui::make_icon_badge("dialog-information", auto_cfg->colors.surface_variant, 34, 8, 14);
     guide_row->add_view(g_badge);
 
     auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     guide_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
-    auto g_title = TextViewBuilder::create()->text("How to Test Apps in a Disposable Container")->bold(true)->build();
+    auto g_title = TextViewBuilder::create()->text("💡 How Container Testbeds Work")->bold(true)->build();
     auto g_desc = TextViewBuilder::create()
-        ->text("1. Launch Terminal: Click '💻 Terminal' on an active testbed.\n2. Install Packages: Run 'sudo pacman -S <package>' inside the container.\n3. Test the App: Launch GUI applications — windows open directly on the Wayland desktop with hardware acceleration.\n4. Wipe Clean: When finished testing, click '🗑️ Destroy' to delete all container packages and files, keeping the host system completely pristine.")
+        ->text("Install and test packages in a disposable environment. Windows appear natively on your Wayland desktop, and destroying the testbed leaves the host system pristine.")
         ->caption()
         ->muted()
         ->multiline(true)
@@ -174,8 +153,7 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
     guide_col->add_view(g_title);
     guide_col->add_view(g_desc);
     guide_row->add_view(guide_col);
-    guide_card->add_view(guide_row);
-    m_layout->add_view(guide_card);
+    m_layout->add_view(guide_row);
 
     set_content_view(m_layout);
     rebuild_boxes_list();
@@ -200,24 +178,15 @@ void TestbedView::rebuild_boxes_list() {
 
     if (!m_info.distrobox_installed || !m_info.podman_installed) {
         auto auto_cfg = Config::get();
-        auto inst_card = std::make_shared<FrameLayout>();
-        inst_card->set_background_color(auto_cfg->colors.surface_variant);
-        inst_card->set_corner_radius(10);
-        inst_card->set_padding(14, 10);
-        inst_card->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent)
-        ));
-        inst_card->set_margin(0, 0, 0, 14);
-
         auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
         row->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::Top
         ));
+        row->set_margin(0, 8, 0, 20);
 
-        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 32, 8, 12);
+        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 34, 8, 14);
         row->add_view(badge);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -236,29 +205,21 @@ void TestbedView::rebuild_boxes_list() {
         col->add_view(t);
         col->add_view(d);
         row->add_view(col);
-        inst_card->add_view(row);
-        m_boxes_container->add_view(inst_card);
+        m_boxes_container->add_view(row);
         return;
     }
 
     if (m_info.boxes.empty()) {
         auto auto_cfg = Config::get();
-        auto empty_card = std::make_shared<CardView>();
-        empty_card->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent)
-        ));
-        empty_card->set_padding(14, 12);
-        empty_card->set_margin(0, 0, 0, 14);
-
         auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
         row->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::CenterVertical
         ));
+        row->set_margin(0, 8, 0, 20);
 
-        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 32, 8, 12);
+        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 34, 8, 14);
         row->add_view(badge);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -277,8 +238,7 @@ void TestbedView::rebuild_boxes_list() {
         col->add_view(t);
         col->add_view(msg);
         row->add_view(col);
-        empty_card->add_view(row);
-        m_boxes_container->add_view(empty_card);
+        m_boxes_container->add_view(row);
         return;
     }
 
@@ -286,19 +246,12 @@ void TestbedView::rebuild_boxes_list() {
         const auto& box = m_info.boxes[i];
         std::string b_name = box.name;
 
-        auto box_card = std::make_shared<CardView>();
-        box_card->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent)
-        ));
-        box_card->set_padding(14, 10);
-        box_card->set_margin(0, 0, 0, 14);
-
         auto box_col = std::make_shared<LinearLayout>(Orientation::Vertical);
         box_col->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent)
         ));
+        box_col->set_margin(0, 8, 0, 24);
 
         // ---------------------------------------------------------------------
         // Row 1: Box Identity & Actions (Terminal, Destroy)
@@ -586,8 +539,7 @@ void TestbedView::rebuild_boxes_list() {
             box_col->add_view(apps_list);
         }
 
-        box_card->add_view(box_col);
-        m_boxes_container->add_view(box_card);
+        m_boxes_container->add_view(box_col);
     }
 }
 

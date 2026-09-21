@@ -27,7 +27,6 @@ private:
     // Network mode & details
     std::shared_ptr<miqu::Spinner> m_spinner_mode;
     std::shared_ptr<miqu::TextView> m_network_lbl;
-    std::shared_ptr<miqu::TextView> m_mode_tech_desc;
     std::shared_ptr<miqu::TextView> m_mode_desc;
     bool m_updating_ui = false;
 

@@ -18,31 +18,24 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(18, 14);
+    m_layout->set_padding(22, 18);
 
     // =========================================================================
-    // 1. MASTER FIREWALL STATUS HERO CARD (Windows Security / iOS Style)
+    // 1. MASTER FIREWALL STATUS HERO (Direct Placement with Rich Spacing)
     // =========================================================================
     auto auto_cfg = Config::get();
-    auto hero_card = std::make_shared<CardView>();
-    hero_card->set_padding(14, 12);
-    hero_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    hero_card->set_margin(0, 0, 0, 14);
-
     auto hero_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     hero_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
+    hero_row->set_margin(0, 4, 0, 20);
 
     auto hero_badge = ui::make_icon_badge(
         "security-high",
         m_info.active ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant,
-        40, 10, 14
+        42, 10, 16
     );
     hero_row->add_view(hero_badge);
 
@@ -54,6 +47,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         ->h2()
         ->bold(true)
         ->build();
+    m_status_lbl->set_margin(0, 0, 0, 4);
 
     std::string net_str = m_info.active_network_name.empty() ?
         "No active network connection detected." :
@@ -99,8 +93,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         }).detach();
     });
     hero_row->add_view(m_switch_master);
-    hero_card->add_view(hero_row);
-    m_layout->add_view(hero_card);
+    m_layout->add_view(hero_row);
 
     // Docked Progress Bar
     m_progress_bar = ProgressBarBuilder::create()
@@ -112,22 +105,16 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         static_cast<int>(LayoutDimension::MatchParent),
         3
     ));
-    m_progress_bar->set_margin(0, 0, 0, 10);
+    m_progress_bar->set_margin(0, 0, 0, 16);
     m_progress_bar->set_visibility(Visibility::Invisible);
     m_layout->add_view(m_progress_bar);
 
     // =========================================================================
-    // 2. NETWORK PROTECTION CONFIGURATION (Grouped Card)
+    // 2. NETWORK PROTECTION CONFIGURATION (Direct Placement)
     // =========================================================================
-    m_layout->add_view(ui::make_section_header("FIREWALL PRESET POLICY"));
-
-    auto pol_card = std::make_shared<CardView>();
-    pol_card->set_padding(14, 10);
-    pol_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    pol_card->set_margin(0, 0, 0, 14);
+    auto sec_policy_hdr = ui::make_section_header("FIREWALL PRESET POLICY");
+    sec_policy_hdr->set_margin(0, 18, 0, 12);
+    m_layout->add_view(sec_policy_hdr);
 
     auto mode_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     mode_row->set_layout_params(LayoutParams(
@@ -135,34 +122,26 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    mode_row->set_margin(4, 6, 4, 6);
+    mode_row->set_margin(0, 4, 0, 20);
 
-    auto mode_badge = ui::make_icon_badge("security-high", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto mode_badge = ui::make_icon_badge("security-high", auto_cfg->colors.surface_variant, 34, 8, 14);
     mode_row->add_view(mode_badge);
 
     auto mode_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     mode_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
-    auto mode_title = TextViewBuilder::create()->text("Protection Preset Profile")->bold(true)->build();
+    auto mode_title = TextViewBuilder::create()->text("Protection Preset")->bold(true)->build();
     m_mode_desc = TextViewBuilder::create()
-        ->text("")
-        ->caption()
-        ->multiline(true)
-        ->ellipsize(false)
-        ->build();
-    m_mode_desc->set_margin(0, 2, 0, 2);
-
-    m_mode_tech_desc = TextViewBuilder::create()
         ->text("")
         ->caption()
         ->muted()
         ->multiline(true)
         ->ellipsize(false)
         ->build();
+    m_mode_desc->set_margin(0, 3, 0, 0);
 
     mode_col->add_view(mode_title);
     mode_col->add_view(m_mode_desc);
-    mode_col->add_view(m_mode_tech_desc);
     mode_row->add_view(mode_col);
 
     std::vector<std::string> mode_items = {
@@ -210,28 +189,22 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
     ));
     mode_row->add_view(m_spinner_mode);
 
-    pol_card->add_view(mode_row);
-    m_layout->add_view(pol_card);
+    m_layout->add_view(mode_row);
     update_mode_descriptions(m_info.current_mode);
 
     // =========================================================================
-    // 3. OPEN CUSTOM INBOUND PORT CARD (Dedicated Form Card)
+    // 3. OPEN CUSTOM INBOUND PORT (Direct Placement)
     // =========================================================================
-    m_layout->add_view(ui::make_section_header("OPEN INBOUND PORT"));
-
-    auto custom_port_card = std::make_shared<CardView>();
-    custom_port_card->set_padding(14, 10);
-    custom_port_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    custom_port_card->set_margin(0, 0, 0, 14);
+    auto sec_port_hdr = ui::make_section_header("OPEN INBOUND PORT");
+    sec_port_hdr->set_margin(0, 18, 0, 12);
+    m_layout->add_view(sec_port_hdr);
 
     auto custom_port_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     custom_port_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    custom_port_col->set_margin(0, 4, 0, 20);
 
     auto port_top = std::make_shared<LinearLayout>(Orientation::Horizontal);
     port_top->set_layout_params(LayoutParams(
@@ -239,22 +212,22 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    port_top->set_margin(4, 4, 4, 8);
+    port_top->set_margin(0, 2, 0, 12);
 
-    auto port_badge = ui::make_icon_badge("security-low", auto_cfg->colors.surface_variant, 32, 8, 12);
+    auto port_badge = ui::make_icon_badge("security-low", auto_cfg->colors.surface_variant, 34, 8, 14);
     port_top->add_view(port_badge);
 
     auto port_text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     port_text_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
-    auto port_title = TextViewBuilder::create()->text("Open Inbound Port Rule")->bold(true)->build();
+    auto port_title = TextViewBuilder::create()->text("Open Inbound Port")->bold(true)->build();
     auto port_desc = TextViewBuilder::create()
-        ->text("Allow external network connections on a specific port number for local testing or custom servers.")
+        ->text("Allow incoming connections on a specific port for testing or servers.")
         ->caption()
         ->muted()
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    port_desc->set_margin(0, 2, 0, 0);
+    port_desc->set_margin(0, 3, 0, 0);
     port_text_col->add_view(port_title);
     port_text_col->add_view(port_desc);
     port_top->add_view(port_text_col);
@@ -267,7 +240,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    form_row->set_margin(4, 6, 4, 6);
+    form_row->set_margin(0, 4, 0, 8);
 
     m_input_port = EditTextBuilder::create()
         ->hint("Port number (e.g. 3000, 8080, 25565)")
@@ -278,7 +251,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         static_cast<int>(LayoutDimension::WrapContent),
         1.0f
     ));
-    m_input_port->set_margin(0, 0, 10, 0);
+    m_input_port->set_margin(0, 0, 12, 0);
     form_row->add_view(m_input_port);
 
     std::vector<std::string> proto_items = {"TCP", "UDP", "TCP & UDP"};
@@ -296,7 +269,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         130,
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_spinner_proto->set_margin(0, 0, 10, 0);
+    m_spinner_proto->set_margin(0, 0, 12, 0);
     form_row->add_view(m_spinner_proto);
 
     auto btn_add = ButtonBuilder::create()
@@ -336,34 +309,28 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    port_note->set_margin(4, 4, 4, 0);
+    port_note->set_margin(0, 4, 0, 0);
     custom_port_col->add_view(port_note);
 
-    custom_port_card->add_view(custom_port_col);
-    m_layout->add_view(custom_port_card);
+    m_layout->add_view(custom_port_col);
 
     // =========================================================================
-    // 3. LOCAL SERVICES SHARING (Grouped Card Container)
+    // 4. LOCAL NETWORK SERVICES (Direct Placement with Rich Spacing)
     // =========================================================================
-    m_layout->add_view(ui::make_section_header("LOCAL NETWORK SERVICES"));
-
-    auto serv_card = std::make_shared<CardView>();
-    serv_card->set_padding(14, 10);
-    serv_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    serv_card->set_margin(0, 0, 0, 14);
+    auto sec_serv_hdr = ui::make_section_header("LOCAL NETWORK SERVICES");
+    sec_serv_hdr->set_margin(0, 18, 0, 12);
+    m_layout->add_view(sec_serv_hdr);
 
     auto serv_list = std::make_shared<LinearLayout>(Orientation::Vertical);
     serv_list->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    serv_list->set_margin(0, 4, 0, 20);
 
     auto make_service_row = [this](const std::string& icon,
                                    const std::string& title,
-                                   const std::string& desc, const std::string& tech,
+                                   const std::string& desc,
                                    bool is_allowed, const std::string& port,
                                    std::shared_ptr<Switch>& out_switch) {
         auto cfg = Config::get();
@@ -373,9 +340,9 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::CenterVertical
         ));
-        row->set_margin(4, 6, 4, 6);
+        row->set_margin(0, 10, 0, 10);
 
-        auto badge = ui::make_icon_badge(icon, cfg->colors.surface_variant, 32, 8, 12);
+        auto badge = ui::make_icon_badge(icon, cfg->colors.surface_variant, 34, 8, 14);
         row->add_view(badge);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -383,12 +350,10 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
 
         auto name_tv = TextViewBuilder::create()->text(title)->bold(true)->build();
         auto desc_tv = TextViewBuilder::create()->text(desc)->caption()->muted()->multiline(true)->ellipsize(false)->build();
-        desc_tv->set_margin(0, 2, 0, 1);
-        auto tech_tv = TextViewBuilder::create()->text(tech)->caption()->muted()->multiline(true)->ellipsize(false)->build();
+        desc_tv->set_margin(0, 2, 0, 0);
 
         col->add_view(name_tv);
         col->add_view(desc_tv);
-        col->add_view(tech_tv);
         row->add_view(col);
 
         auto sw = SwitchBuilder::create()
@@ -422,61 +387,53 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
     };
 
     // SSH Row
-    serv_list->add_view(make_service_row("utilities-terminal", "Remote Terminal (SSH - 22)",
-        "Allow secure command-line login from trusted machines across the network.",
-        "⚙ OpenSSH Daemon • Port 22/tcp",
+    serv_list->add_view(make_service_row("utilities-terminal", "Remote Terminal (SSH)",
+        "Secure command-line login over local network (Port 22).",
         m_info.ssh_allowed, "22", m_switch_ssh));
 
     // Local Web Dev Row
-    serv_list->add_view(make_service_row("network-workgroup", "Local Web Dev (8080)",
-        "Allow testing local web servers on this machine from other devices.",
-        "⚙ HTTP Web Server • Port 8080/tcp",
+    serv_list->add_view(make_service_row("network-workgroup", "Local Web Server",
+        "Incoming connections for local web development (Port 8080).",
         m_info.web_dev_allowed, "8080", m_switch_web));
 
     // Syncthing Row
-    serv_list->add_view(make_service_row("view-refresh", "Syncthing File Sync (22000)",
-        "Allow continuous peer-to-peer folder and document synchronization.",
-        "⚙ Syncthing Protocol • Port 22000/tcp,udp",
+    serv_list->add_view(make_service_row("view-refresh", "Syncthing Sync",
+        "Peer-to-peer folder and document synchronization (Port 22000).",
         m_info.syncthing_allowed, "22000", m_switch_syncthing));
 
     // Samba Row
-    serv_list->add_view(make_service_row("folder", "LAN File Share (Samba - 445)",
-        "Allow Windows and Linux network folder and document sharing.",
-        "⚙ SMB/CIFS Network Share • Port 445/tcp",
+    serv_list->add_view(make_service_row("folder", "File Sharing (Samba)",
+        "Local network folder and file sharing (Port 445).",
         m_info.samba_allowed, "445", m_switch_samba));
 
-    serv_card->add_view(serv_list);
-    m_layout->add_view(serv_card);
+    m_layout->add_view(serv_list);
 
     // =========================================================================
-    // 4. CONFIGURED RULES LIST (Unified Card Container)
+    // 5. CONFIGURED RULES LIST (Direct Placement)
     // =========================================================================
     m_rules_container = std::make_shared<LinearLayout>(Orientation::Vertical);
     m_rules_container->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    m_rules_container->set_margin(0, 0, 0, 8);
 
     rebuild_rules_list();
     m_layout->add_view(m_rules_container);
 
     // =========================================================================
-    // 5. "WHAT IS A FIREWALL?" (Soft Tinted, Borderless Callout)
+    // 6. "WHAT IS A FIREWALL?" (Direct Placement Callout)
     // =========================================================================
-    auto guide_card = std::make_shared<FrameLayout>();
-    guide_card->set_background_color(auto_cfg->colors.surface_variant);
-    guide_card->set_corner_radius(10);
-    guide_card->set_padding(14, 10);
-    guide_card->set_layout_params(LayoutParams(
+    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    guide_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    guide_card->set_margin(0, 4, 0, 10);
+    guide_col->set_margin(0, 18, 0, 24);
 
-    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    auto g_title = TextViewBuilder::create()->text("💡 What is a Firewall & Why Configure It?")->bold(true)->build();
+    auto g_title = TextViewBuilder::create()->text("💡 What is a Firewall?")->bold(true)->build();
     auto g_desc = TextViewBuilder::create()
-        ->text("A firewall monitors and controls all incoming and outgoing network traffic based on predefined security rules. It establishes a digital barrier between your trusted internal device and untrusted external networks (like public Wi-Fi).\n\nEnabling Miqu Firewall shields your machine from port scans, unauthorized remote connections, and network-level exploits while allowing your normal web browsing and trusted LAN shares.")
+        ->text("Monitors incoming and outgoing network traffic to block unauthorized connections, port scans, and remote exploits.")
         ->caption()
         ->muted()
         ->multiline(true)
@@ -485,8 +442,7 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
 
     guide_col->add_view(g_title);
     guide_col->add_view(g_desc);
-    guide_card->add_view(guide_col);
-    m_layout->add_view(guide_card);
+    m_layout->add_view(guide_col);
 
     set_content_view(m_layout);
 }
@@ -528,22 +484,16 @@ void FirewallView::rebuild_rules_list() {
     m_rules_container->clear_views();
 
     auto list_hdr = ui::make_section_header("ACTIVE INBOUND PORT RULES (" + std::to_string(m_info.rules.size()) + ")");
+    list_hdr->set_margin(0, 18, 0, 12);
     m_rules_container->add_view(list_hdr);
 
     if (m_info.rules.empty()) {
-        auto empty_card = std::make_shared<CardView>();
-        empty_card->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent)
-        ));
-        empty_card->set_padding(14, 12);
-        empty_card->set_margin(0, 0, 0, 8);
-
         auto empty_col = std::make_shared<LinearLayout>(Orientation::Vertical);
         empty_col->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent)
         ));
+        empty_col->set_margin(0, 4, 0, 16);
 
         auto empty_tv = TextViewBuilder::create()
             ->text("🛡️ No custom port rules added. Default security policy guards all inbound ports.")
@@ -558,24 +508,16 @@ void FirewallView::rebuild_rules_list() {
             static_cast<int>(LayoutDimension::WrapContent)
         ));
         empty_col->add_view(empty_tv);
-        empty_card->add_view(empty_col);
-        m_rules_container->add_view(empty_card);
+        m_rules_container->add_view(empty_col);
         return;
     }
-
-    auto rules_card = std::make_shared<CardView>();
-    rules_card->set_padding(14, 8);
-    rules_card->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    rules_card->set_margin(0, 0, 0, 14);
 
     auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     list_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
+    list_col->set_margin(0, 4, 0, 16);
 
     auto cfg = Config::get();
     for (size_t i = 0; i < m_info.rules.size(); ++i) {
@@ -586,13 +528,13 @@ void FirewallView::rebuild_rules_list() {
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::CenterVertical
         ));
-        r_row->set_margin(4, 6, 4, 6);
+        r_row->set_margin(0, 10, 0, 10);
 
         bool is_allow = (rule.action == "ALLOW");
         auto r_badge = ui::make_icon_badge(
             is_allow ? "emblem-default" : "dialog-error",
             is_allow ? cfg->colors.primary_container : cfg->colors.surface_variant,
-            32, 8, 12
+            34, 8, 14
         );
         r_row->add_view(r_badge);
 
@@ -621,6 +563,7 @@ void FirewallView::rebuild_rules_list() {
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent)
         ));
+        src_tv->set_margin(0, 3, 0, 0);
 
         col->add_view(port_tv);
         col->add_view(src_tv);
@@ -647,32 +590,26 @@ void FirewallView::rebuild_rules_list() {
         list_col->add_view(r_row);
     }
 
-    rules_card->add_view(list_col);
-    m_rules_container->add_view(rules_card);
+    m_rules_container->add_view(list_col);
 }
 
 void FirewallView::update_mode_descriptions(NetworkMode mode) {
-    if (!m_mode_desc || !m_mode_tech_desc) return;
+    if (!m_mode_desc) return;
 
     switch (mode) {
         case NetworkMode::Home:
-            m_mode_tech_desc->set_text("⚙ ufw: deny in, allow out • metered: off");
-            m_mode_desc->set_text("Optimized for trusted home networks. Blocks intrusions while keeping local devices accessible.");
+            m_mode_desc->set_text("Blocks inbound attacks while keeping LAN devices accessible.");
             break;
         case NetworkMode::MobileHotspot:
-            m_mode_tech_desc->set_text("⚙ ufw: reject in • metered: on (saver)");
-            m_mode_desc->set_text("Optimized when tethered to mobile hotspots. Drops probes and pauses background updates.");
+            m_mode_desc->set_text("Drops inbound probes and pauses background updates for metered data.");
             break;
         case NetworkMode::PublicWifi:
-            m_mode_tech_desc->set_text("⚙ ufw: reject in • stealth ICMP drop");
-            m_mode_desc->set_text("Optimized for coffee shops and hotels. Invisible to network scanners and ignores ping probes.");
+            m_mode_desc->set_text("Stealth mode. Drops network scans and ignores ping probes.");
             break;
         case NetworkMode::Lockdown:
-            m_mode_tech_desc->set_text("⚙ ufw: reject in • local ports locked");
-            m_mode_desc->set_text("Maximum isolation for hostile networks. Shuts down local listening ports and blocks all inbound traffic.");
+            m_mode_desc->set_text("Strict isolation. Shuts down all inbound ports and listening shares.");
             break;
         default:
-            m_mode_tech_desc->set_text("⚙ custom firewall rules applied");
             m_mode_desc->set_text("Custom user-configured firewall policy.");
             break;
     }

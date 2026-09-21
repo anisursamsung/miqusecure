@@ -8,18 +8,15 @@ namespace miqusecure {
 
 namespace ui {
 
-// Creates a refined iOS/Win11 squircle icon badge plate using official toolkit colors
+// Creates a clean, direct icon without any background colored plate
 inline std::shared_ptr<miqu::FrameLayout> make_icon_badge(
     const std::string& icon_name_or_text,
-    const miqu::Color& bg_color = miqu::Color::transparent(),
-    int size = 32,
-    int radius = 8,
-    int margin_right = 12)
+    const miqu::Color& /*bg_color*/ = miqu::Color::transparent(),
+    int size = 28,
+    int /*radius*/ = 0,
+    int margin_right = 14)
 {
-    auto cfg = miqu::Config::get();
     auto frame = std::make_shared<miqu::FrameLayout>();
-    frame->set_background_color(bg_color.a > 0.01f ? bg_color : cfg->colors.surface_variant);
-    frame->set_corner_radius(radius);
     frame->set_layout_params(miqu::LayoutParams(
         size,
         size,
@@ -31,7 +28,7 @@ inline std::shared_ptr<miqu::FrameLayout> make_icon_badge(
     bool is_img = !resolved.empty() || icon_name_or_text.starts_with('/') || icon_name_or_text.ends_with(".png") || icon_name_or_text.ends_with(".svg");
 
     if (is_img) {
-        int icon_sz = std::max(14, size - 12);
+        int icon_sz = (size >= 28) ? (size - 4) : size;
         auto img = miqu::ImageViewBuilder::create()
             ->imageResource(!resolved.empty() ? resolved : icon_name_or_text)
             ->targetSize(icon_sz)
