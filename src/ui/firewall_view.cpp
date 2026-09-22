@@ -366,16 +366,21 @@ FirewallView::FirewallView(const FirewallInfo& info, std::function<void()> on_ru
         ));
         std::weak_ptr<Switch> weak_sw = sw;
         sw->set_on_checked_changed_listener([this, port, weak_sw](bool checked) {
+            if (m_updating_ui) return;
+            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
             std::thread([this, port, checked, weak_sw]() {
                 bool ok = SecurityBackend::toggle_service(port, checked);
                 if (auto engine = AppEngine::instance()) {
                     engine->post([this, checked, ok, weak_sw]() {
+                        if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok) {
                             if (m_on_changed) m_on_changed();
                         } else {
+                            m_updating_ui = true;
                             if (auto s = weak_sw.lock()) {
                                 s->set_checked(!checked);
                             }
+                            m_updating_ui = false;
                         }
                     });
                 }
@@ -569,16 +574,18 @@ void FirewallView::rebuild_rules_list() {
         col->add_view(src_tv);
         r_row->add_view(col);
 
-        int rule_idx = rule.id;
+        FirewallRule current_rule = rule;
         auto del_btn = ButtonBuilder::create()
             ->text("Delete")
             ->flat(true)
             ->padding(10, 6)
-            ->onClick([this, rule_idx]() {
-                std::thread([this, rule_idx]() {
-                    bool ok = SecurityBackend::delete_firewall_rule(rule_idx);
+            ->onClick([this, current_rule]() {
+                if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
+                std::thread([this, current_rule]() {
+                    bool ok = SecurityBackend::delete_firewall_rule(current_rule);
                     if (auto engine = AppEngine::instance()) {
                         engine->post([this, ok]() {
+                            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                             if (ok && m_on_changed) m_on_changed();
                         });
                     }

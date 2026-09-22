@@ -140,6 +140,18 @@ FirewallInfo SecurityBackend::read_firewall() {
                     rule.port_or_service = "All Traffic";
                 }
 
+                size_t s_pos = line.find("-s ");
+                if (s_pos != std::string::npos) {
+                    size_t space_pos = line.find(' ', s_pos + 3);
+                    if (space_pos != std::string::npos) {
+                        rule.source = line.substr(s_pos + 3, space_pos - (s_pos + 3));
+                    } else {
+                        rule.source = line.substr(s_pos + 3);
+                    }
+                } else {
+                    rule.source = "Anywhere";
+                }
+
                 if (rule.action == "ALLOW") {
                     if (rule.port_or_service == "22" || rule.port_or_service == "ssh") info.ssh_allowed = true;
                     if (rule.port_or_service == "8080") info.web_dev_allowed = true;
@@ -655,7 +667,7 @@ bool SecurityBackend::set_mic_muted(bool muted) {
 }
 
 bool SecurityBackend::set_firewall_enabled(bool enabled) {
-    std::string cmd = "pkexec ufw ";
+    std::string cmd = "pkexec ufw --force ";
     cmd += (enabled ? "enable" : "disable");
     int ret = std::system(cmd.c_str());
     return (ret == 0);
@@ -744,11 +756,11 @@ bool SecurityBackend::toggle_service(const std::string& port, bool enable) {
 bool SecurityBackend::apply_firewall_preset(const std::string& preset) {
     std::string cmd;
     if (preset == "standard") {
-        cmd = "pkexec ufw default deny incoming && pkexec ufw default allow outgoing && pkexec ufw enable";
+        cmd = "pkexec ufw default deny incoming && pkexec ufw default allow outgoing && pkexec ufw --force enable";
     } else if (preset == "strict") {
-        cmd = "pkexec ufw default reject incoming && pkexec ufw default allow outgoing && pkexec ufw enable";
+        cmd = "pkexec ufw default reject incoming && pkexec ufw default allow outgoing && pkexec ufw --force enable";
     } else {
-        cmd = "pkexec ufw enable";
+        cmd = "pkexec ufw --force enable";
     }
     int ret = std::system(cmd.c_str());
     return (ret == 0);
@@ -764,7 +776,29 @@ bool SecurityBackend::add_firewall_rule(const std::string& port, const std::stri
     return (ret == 0);
 }
 
+bool SecurityBackend::delete_firewall_rule(const FirewallRule& rule) {
+    std::string act = (rule.action == "DENY") ? "deny" : ((rule.action == "REJECT") ? "reject" : "allow");
+    std::string cmd;
+    if (!rule.port_or_service.empty() && rule.port_or_service != "All Traffic") {
+        if (!rule.source.empty() && rule.source != "Anywhere" && rule.source != "0.0.0.0/0" && rule.source != "::/0") {
+            cmd = "pkexec ufw delete " + act + " from " + rule.source + " to any port " + rule.port_or_service;
+        } else {
+            cmd = "pkexec ufw delete " + act + " " + rule.port_or_service;
+        }
+        if (!rule.protocol.empty() && rule.protocol != "any") {
+            cmd += "/" + rule.protocol;
+        }
+    } else if (rule.id > 0) {
+        cmd = "pkexec ufw --force delete " + std::to_string(rule.id);
+    } else {
+        return false;
+    }
+    int ret = std::system(cmd.c_str());
+    return (ret == 0);
+}
+
 bool SecurityBackend::delete_firewall_rule(int rule_index) {
+    if (rule_index <= 0) return false;
     std::string cmd = "pkexec ufw --force delete " + std::to_string(rule_index);
     int ret = std::system(cmd.c_str());
     return (ret == 0);

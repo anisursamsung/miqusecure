@@ -187,6 +187,7 @@ public:
     static bool toggle_service(const std::string& port, bool enable);
     static bool apply_firewall_preset(const std::string& preset);
     static bool add_firewall_rule(const std::string& port, const std::string& proto, const std::string& action);
+    static bool delete_firewall_rule(const FirewallRule& rule);
     static bool delete_firewall_rule(int rule_index);
 
     // DNS configuration actions via pkexec nmcli
