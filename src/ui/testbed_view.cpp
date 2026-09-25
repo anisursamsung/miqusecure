@@ -6,6 +6,12 @@ using namespace miqu;
 
 namespace miqusecure {
 
+static const Color COLOR_ACTIVE_GREEN(0.188f, 0.820f, 0.345f, 1.0f); // #30d158
+static const Color COLOR_INACTIVE_GRAY(0.545f, 0.545f, 0.600f, 1.0f); // #8b8b99
+
+// =============================================================================
+// CONSTRUCTOR
+// =============================================================================
 TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_refresh)
     : m_info(info), m_on_refresh(std::move(on_refresh)) {
     set_layout_params(LayoutParams(
@@ -18,34 +24,63 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(22, 18);
+    m_layout->set_padding(24, 16);
 
-    // =========================================================================
-    // 1. TOP HEADER & STATUS HERO (Direct Placement)
-    // =========================================================================
-    auto auto_cfg = Config::get();
+    setup_status_hero();
+    setup_create_section();
+
+    auto sec_testbeds_hdr = ui::make_section_header("CONFIGURED TESTBEDS");
+    m_layout->add_view(sec_testbeds_hdr);
+
+    m_boxes_container = std::make_shared<LinearLayout>(Orientation::Vertical);
+    m_boxes_container->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    m_boxes_container->set_margin(0, 0, 0, 24);
+    m_layout->add_view(m_boxes_container);
+
+    set_content_view(m_layout);
+    rebuild_boxes_list();
+}
+
+// =============================================================================
+// 1. STATUS HERO CARD
+// =============================================================================
+void TestbedView::setup_status_hero() {
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(18, 14)
+        ->build();
+    card->set_margin(0, 4, 0, 6);
+
     auto status_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     status_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    status_row->set_margin(0, 4, 0, 16);
 
-    auto hero_badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.primary_container, 34, 8, 14);
-    status_row->add_view(hero_badge);
+    // 8px indicator dot
+    bool ready = (m_info.distrobox_installed && m_info.podman_installed);
+    m_status_dot = std::make_shared<FrameLayout>();
+    m_status_dot->set_layout_params(LayoutParams(8, 8, Gravity::CenterVertical));
+    m_status_dot->set_corner_radius(4);
+    m_status_dot->set_margin(0, 0, 14, 0);
+    update_status_indicator(ready);
+    status_row->add_view(m_status_dot);
 
     auto info_col = std::make_shared<LinearLayout>(Orientation::Vertical);
     info_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
     auto title_tv = TextViewBuilder::create()
         ->text("Disposable Testing Environments")
-        ->h2()
+        ->h3()
         ->bold(true)
         ->build();
-    title_tv->set_margin(0, 0, 0, 4);
+    title_tv->set_margin(0, 0, 0, 3);
 
-    std::string st_str = (m_info.distrobox_installed && m_info.podman_installed) ?
+    std::string st_str = ready ?
         "Podman & Distrobox ready • Run GUI and CLI apps in isolated containers" :
         "Container engine needed • Install Podman and Distrobox to enable";
     m_status_lbl = TextViewBuilder::create()
@@ -55,42 +90,15 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    m_status_lbl->set_margin(0, 2, 0, 0);
 
     info_col->add_view(title_tv);
     info_col->add_view(m_status_lbl);
     status_row->add_view(info_col);
 
-    if (m_info.distrobox_installed && m_info.podman_installed) {
-        m_btn_create = ButtonBuilder::create()
-            ->text("+ Create Arch Testbed")
-            ->primary(true)
-            ->bold(true)
-            ->padding(14, 8)
-            ->onClick([this]() {
-                if (m_btn_create) {
-                    m_btn_create->set_text("⏳ Creating testbed...");
-                }
-                if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-                std::thread([this]() {
-                    SecurityBackend::create_testbed("testbox", "archlinux:latest");
-                    if (auto engine = AppEngine::instance()) {
-                        engine->post([this]() {
-                            if (m_btn_create) {
-                                m_btn_create->set_text("+ Create Arch Testbed");
-                            }
-                            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
-                            if (m_on_refresh) m_on_refresh();
-                        });
-                    }
-                }).detach();
-            })
-            ->build();
-        status_row->add_view(m_btn_create);
-    }
-    m_layout->add_view(status_row);
+    card->add_view(status_row);
+    m_layout->add_view(card);
 
-    // Docked linear progress bar (3px, zero layout shift)
+    // Docked 3px indeterminate progress bar
     m_progress_bar = ProgressBarBuilder::create()
         ->style(ProgressBarStyle::Linear)
         ->indeterminate(true)
@@ -101,172 +109,263 @@ TestbedView::TestbedView(const DistroboxInfo& info, std::function<void()> on_ref
         3
     ));
     m_progress_bar->set_visibility(Visibility::Invisible);
-    m_progress_bar->set_margin(0, 0, 0, 16);
+    m_progress_bar->set_margin(0, 0, 0, 4);
     m_layout->add_view(m_progress_bar);
+}
 
-    // =========================================================================
-    // 2. ACTIVE TESTBEDS SECTION
-    // =========================================================================
-    auto sec_testbeds_hdr = ui::make_section_header("CONFIGURED TESTBEDS");
-    sec_testbeds_hdr->set_margin(0, 18, 0, 12);
-    m_layout->add_view(sec_testbeds_hdr);
+// =============================================================================
+// 2. CREATE NEW TESTBED SECTION
+// =============================================================================
+void TestbedView::setup_create_section() {
+    bool ready = (m_info.distrobox_installed && m_info.podman_installed);
 
-    m_boxes_container = std::make_shared<LinearLayout>(Orientation::Vertical);
-    m_boxes_container->set_layout_params(LayoutParams(
+    // Wrap header + card in a single container for visibility toggling
+    m_create_section = std::make_shared<LinearLayout>(Orientation::Vertical);
+    m_create_section->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_boxes_container->set_margin(0, 0, 0, 14);
-    m_layout->add_view(m_boxes_container);
+    m_create_section->set_visibility(ready ? Visibility::Visible : Visibility::Gone);
 
-    // =========================================================================
-    // 3. EDUCATIONAL CALLOUT (Direct Placement)
-    // =========================================================================
-    auto sec_guide_hdr = ui::make_section_header("TESTBED USAGE GUIDE");
-    sec_guide_hdr->set_margin(0, 18, 0, 12);
-    m_layout->add_view(sec_guide_hdr);
+    auto sec_hdr = ui::make_section_header("NEW TESTBED");
+    m_create_section->add_view(sec_hdr);
 
-    auto guide_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    guide_row->set_layout_params(LayoutParams(
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(18, 12)
+        ->build();
+    card->set_margin(0, 0, 0, 6);
+
+    auto form_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    form_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
-        Gravity::Top
+        Gravity::CenterVertical
     ));
-    guide_row->set_margin(0, 4, 0, 24);
 
-    auto g_badge = ui::make_icon_badge("dialog-information", auto_cfg->colors.surface_variant, 34, 8, 14);
-    guide_row->add_view(g_badge);
-
-    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    guide_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
-
-    auto g_title = TextViewBuilder::create()->text("💡 How Container Testbeds Work")->bold(true)->build();
-    auto g_desc = TextViewBuilder::create()
-        ->text("Install and test packages in a disposable environment. Windows appear natively on your Wayland desktop, and destroying the testbed leaves the host system pristine.")
-        ->caption()
-        ->muted()
-        ->multiline(true)
-        ->ellipsize(false)
+    m_input_name = EditTextBuilder::create()
+        ->hint("Container name (e.g. testbox)...")
+        ->padding(10, 8)
         ->build();
-    g_desc->set_margin(0, 4, 0, 0);
+    m_input_name->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+    m_input_name->set_margin(0, 0, 10, 0);
+    form_row->add_view(m_input_name);
 
-    guide_col->add_view(g_title);
-    guide_col->add_view(g_desc);
-    guide_row->add_view(guide_col);
-    m_layout->add_view(guide_row);
+    // Image selector — common distrobox-supported base images
+    static const std::vector<std::string> IMAGE_LABELS = {
+        "Arch Linux",
+        "Ubuntu",
+        "Fedora",
+        "Debian",
+        "openSUSE",
+        "Alpine"
+    };
+    static const std::vector<std::string> IMAGE_TAGS = {
+        "archlinux:latest",
+        "ubuntu:latest",
+        "fedora:latest",
+        "debian:latest",
+        "opensuse/tumbleweed:latest",
+        "alpine:latest"
+    };
 
-    set_content_view(m_layout);
-    rebuild_boxes_list();
+    m_spinner_image = SpinnerBuilder::create()
+        ->items(IMAGE_LABELS)
+        ->selectedIndex(0)
+        ->padding(12, 6)
+        ->cornerRadius(8)
+        ->build();
+    m_spinner_image->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::WrapContent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+    m_spinner_image->set_margin(0, 0, 10, 0);
+    form_row->add_view(m_spinner_image);
+
+    m_btn_create = ButtonBuilder::create()
+        ->text("+ Create Testbed")
+        ->primary(true)
+        ->padding(16, 8)
+        ->build();
+
+    std::weak_ptr<Button> weak_btn = m_btn_create;
+    std::weak_ptr<EditText> weak_name = m_input_name;
+    std::weak_ptr<Spinner> weak_spinner = m_spinner_image;
+
+    m_btn_create->set_on_click_listener([this, weak_btn, weak_name, weak_spinner]() {
+        auto name_inp = weak_name.lock();
+        auto spinner = weak_spinner.lock();
+        auto btn = weak_btn.lock();
+        if (!name_inp || !spinner || !btn) return;
+
+        // Read and trim name — default to "testbox"
+        std::string name = name_inp->get_text();
+        if (auto f = name.find_first_not_of(" \t\n\r"); f != std::string::npos) {
+            name = name.substr(f, name.find_last_not_of(" \t\n\r") - f + 1);
+        } else {
+            name = "testbox";
+        }
+
+        // Resolve image from spinner selection
+        int idx = spinner->get_selected_index();
+        std::string image = (idx >= 0 && idx < static_cast<int>(IMAGE_TAGS.size()))
+            ? IMAGE_TAGS[idx] : IMAGE_TAGS[0];
+
+        btn->set_text("Creating...");
+        if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
+
+        std::thread([this, name, image, weak_btn]() {
+            SecurityBackend::create_testbed(name, image);
+            if (auto engine = AppEngine::instance()) {
+                engine->post([this, weak_btn]() {
+                    if (auto b = weak_btn.lock()) {
+                        b->set_text("+ Create Testbed");
+                    }
+                    if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
+                    if (m_on_refresh) m_on_refresh();
+                });
+            }
+        }).detach();
+    });
+
+    form_row->add_view(m_btn_create);
+
+    card->add_view(form_row);
+    m_create_section->add_view(card);
+    m_layout->add_view(m_create_section);
 }
 
+void TestbedView::update_status_indicator(bool ready) {
+    if (!m_status_dot) return;
+    m_status_dot->set_background_color(ready ? COLOR_ACTIVE_GREEN : COLOR_INACTIVE_GRAY);
+    m_status_dot->request_redraw();
+}
+
+// =============================================================================
+// UPDATE INFO (called when real data arrives or on refresh)
+// =============================================================================
 void TestbedView::update_info(const DistroboxInfo& info) {
     m_info = info;
 
+    bool ready = (m_info.distrobox_installed && m_info.podman_installed);
+    update_status_indicator(ready);
+
     if (m_status_lbl) {
-        std::string st_str = (m_info.distrobox_installed && m_info.podman_installed) ?
+        std::string st_str = ready ?
             "Podman & Distrobox ready • Run GUI and CLI apps in isolated containers" :
             "Container engine needed • Install Podman and Distrobox to enable";
         m_status_lbl->set_text(st_str);
     }
 
+    // Show or hide the creation form based on container engine availability
+    if (m_create_section) {
+        m_create_section->set_visibility(ready ? Visibility::Visible : Visibility::Gone);
+    }
+
     rebuild_boxes_list();
 }
 
+// =============================================================================
+// 3. CONFIGURED TESTBEDS LIST
+// =============================================================================
 void TestbedView::rebuild_boxes_list() {
     if (!m_boxes_container) return;
     m_boxes_container->clear_views();
 
+    // Not-installed state: show install guidance card
     if (!m_info.distrobox_installed || !m_info.podman_installed) {
-        auto auto_cfg = Config::get();
-        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-        row->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent),
-            Gravity::Top
-        ));
-        row->set_margin(0, 8, 0, 20);
-
-        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 34, 8, 14);
-        row->add_view(badge);
+        auto card = CardViewBuilder::create()
+            ->style(CardStyle::Outlined)
+            ->padding(18, 14)
+            ->build();
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-        col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+        col->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::MatchParent),
+            static_cast<int>(LayoutDimension::WrapContent)
+        ));
 
-        auto t = TextViewBuilder::create()->text("Install Distrobox & Podman")->bold(true)->build();
+        auto t = TextViewBuilder::create()
+            ->text("Container Tools Required")
+            ->bold(true)
+            ->build();
         auto d = TextViewBuilder::create()
-            ->text("Distrobox allows spinning up disposable Arch Linux, Ubuntu, or Fedora environments in seconds. All GUI applications run seamlessly on the desktop while isolating packages from the host system.\n\nTo install, run in a terminal:\n  sudo pacman -S distrobox podman")
+            ->text("Distrobox and Podman enable disposable Linux environments for safe app testing. "
+                   "GUI apps run seamlessly on the host display while packages remain fully isolated."
+                   "\n\nTo install, run: sudo pacman -S distrobox podman")
             ->caption()
             ->muted()
             ->multiline(true)
             ->ellipsize(false)
             ->build();
-        d->set_margin(0, 4, 0, 0);
+        d->set_margin(0, 3, 0, 0);
 
         col->add_view(t);
         col->add_view(d);
-        row->add_view(col);
-        m_boxes_container->add_view(row);
+        card->add_view(col);
+        m_boxes_container->add_view(card);
         return;
     }
 
+    // Empty state: no boxes configured yet
     if (m_info.boxes.empty()) {
-        auto auto_cfg = Config::get();
-        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-        row->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent),
-            Gravity::CenterVertical
-        ));
-        row->set_margin(0, 8, 0, 20);
-
-        auto badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 34, 8, 14);
-        row->add_view(badge);
+        auto card = CardViewBuilder::create()
+            ->style(CardStyle::Outlined)
+            ->padding(18, 14)
+            ->build();
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-        col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+        col->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::MatchParent),
+            static_cast<int>(LayoutDimension::WrapContent)
+        ));
 
-        auto t = TextViewBuilder::create()->text("No Active Testbeds")->bold(true)->build();
+        auto t = TextViewBuilder::create()
+            ->text("No Active Testbeds")
+            ->bold(true)
+            ->build();
         auto msg = TextViewBuilder::create()
-            ->text("Click '+ Create Arch Testbed' above to spin up a clean Arch Linux container for safe app testing.")
+            ->text("Use the form above to spin up a clean container for safe app testing.")
             ->caption()
             ->muted()
             ->multiline(true)
             ->ellipsize(false)
             ->build();
-        msg->set_margin(0, 4, 0, 0);
+        msg->set_margin(0, 3, 0, 0);
 
         col->add_view(t);
         col->add_view(msg);
-        row->add_view(col);
-        m_boxes_container->add_view(row);
+        card->add_view(col);
+        m_boxes_container->add_view(card);
         return;
     }
 
+    // Active boxes
     for (size_t i = 0; i < m_info.boxes.size(); ++i) {
         const auto& box = m_info.boxes[i];
         std::string b_name = box.name;
+
+        auto card = CardViewBuilder::create()
+            ->style(CardStyle::Outlined)
+            ->padding(18, 14)
+            ->build();
+        card->set_margin(0, 0, 0, 12);
 
         auto box_col = std::make_shared<LinearLayout>(Orientation::Vertical);
         box_col->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent)
         ));
-        box_col->set_margin(0, 8, 0, 24);
 
-        // ---------------------------------------------------------------------
-        // Row 1: Box Identity & Actions (Terminal, Destroy)
-        // ---------------------------------------------------------------------
+        // --- Row 1: Name + Image + Actions (Terminal, Destroy) ---
         auto row_top = std::make_shared<LinearLayout>(Orientation::Horizontal);
         row_top->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::CenterVertical
         ));
-        row_top->set_margin(4, 4, 4, 8);
-
-        auto auto_cfg = Config::get();
-        auto box_badge = ui::make_icon_badge("package-x-generic", auto_cfg->colors.surface_variant, 32, 8, 12);
-        row_top->add_view(box_badge);
+        row_top->set_margin(0, 0, 0, 8);
 
         auto name_col = std::make_shared<LinearLayout>(Orientation::Vertical);
         name_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
@@ -287,10 +386,9 @@ void TestbedView::rebuild_boxes_list() {
         row_top->add_view(name_col);
 
         auto btn_term = ButtonBuilder::create()
-            ->text("💻 Terminal")
+            ->text("Terminal")
             ->flat(true)
-            ->bold(true)
-            ->padding(10, 6)
+            ->padding(12, 6)
             ->onClick([b_name]() {
                 SecurityBackend::launch_testbed_terminal(b_name);
             })
@@ -299,66 +397,48 @@ void TestbedView::rebuild_boxes_list() {
         row_top->add_view(btn_term);
 
         auto btn_destroy = ButtonBuilder::create()
-            ->text("🗑️ Destroy")
+            ->text("Destroy")
             ->flat(true)
-            ->bold(true)
-            ->padding(10, 6)
+            ->padding(12, 6)
             ->build();
         std::weak_ptr<Button> weak_destroy = btn_destroy;
         btn_destroy->set_on_click_listener([this, b_name, weak_destroy]() {
             if (auto b = weak_destroy.lock()) {
-                b->set_text("⏳ Destroying...");
+                b->set_text("Destroying...");
             }
+            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
             std::thread([this, b_name]() {
                 SecurityBackend::destroy_testbed(b_name);
                 if (auto engine = AppEngine::instance()) {
                     engine->post([this]() {
+                        if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (m_on_refresh) m_on_refresh();
                     });
                 }
             }).detach();
         });
         row_top->add_view(btn_destroy);
-
         box_col->add_view(row_top);
 
-        // ---------------------------------------------------------------------
-        // Row 2: In-App Package Installer & Runner
-        // ---------------------------------------------------------------------
-        auto inst_hdr = TextViewBuilder::create()
-            ->text("📥 Install & Test an Application")
-            ->bold(true)
-            ->build();
-        inst_hdr->set_margin(0, 4, 0, 4);
-        box_col->add_view(inst_hdr);
+        box_col->add_view(DividerViewBuilder::create()->build());
 
-        auto inst_sub = TextViewBuilder::create()
-            ->text("Type any Arch Linux package name to install and run without modifying the host pacman database.")
-            ->caption()
-            ->muted()
-            ->multiline(true)
-            ->ellipsize(false)
-            ->build();
-        inst_sub->set_margin(0, 0, 0, 6);
-        box_col->add_view(inst_sub);
-
+        // --- Row 2: Package Installer ---
         auto form_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
         form_row->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             static_cast<int>(LayoutDimension::WrapContent),
             Gravity::CenterVertical
         ));
-        form_row->set_margin(0, 2, 0, 6);
+        form_row->set_margin(0, 10, 0, 8);
 
         auto input_pkg = EditTextBuilder::create()
-            ->hint("Package name (e.g. gimp, mpv, vlc, wireshark, htop)...")
-            ->padding(12, 8)
+            ->hint("Package name (e.g. gimp, mpv, vlc, htop)...")
+            ->padding(10, 8)
             ->build();
         input_pkg->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
         input_pkg->set_margin(0, 0, 10, 0);
         form_row->add_view(input_pkg);
 
-        // Docked linear progress bar for this box (zero layout shift)
         auto box_progress = ProgressBarBuilder::create()
             ->style(ProgressBarStyle::Linear)
             ->indeterminate(true)
@@ -369,13 +449,12 @@ void TestbedView::rebuild_boxes_list() {
             3
         ));
         box_progress->set_visibility(Visibility::Invisible);
-        box_progress->set_margin(0, 6, 0, 6);
+        box_progress->set_margin(0, 0, 0, 6);
 
         auto btn_install = ButtonBuilder::create()
-            ->text("📥 Install")
+            ->text("Install")
             ->primary(true)
-            ->bold(true)
-            ->padding(12, 8)
+            ->padding(14, 8)
             ->build();
         btn_install->set_margin(0, 0, 8, 0);
 
@@ -396,7 +475,7 @@ void TestbedView::rebuild_boxes_list() {
             pkg = pkg.substr(first, (last - first + 1));
             if (pkg.empty()) return;
 
-            btn->set_text("⏳ Installing...");
+            btn->set_text("Installing...");
             if (prg) prg->set_visibility(Visibility::Visible);
 
             std::thread([this, b_name, pkg, weak_install, weak_input, weak_prog]() {
@@ -411,7 +490,7 @@ void TestbedView::rebuild_boxes_list() {
                             if (ok) i->set_text("");
                         }
                         if (auto b = weak_install.lock()) {
-                            b->set_text(ok ? "✔ Installed" : "✖ Failed");
+                            b->set_text(ok ? "Installed" : "Failed");
                         }
                         if (ok && m_on_refresh) {
                             m_on_refresh();
@@ -423,10 +502,9 @@ void TestbedView::rebuild_boxes_list() {
         form_row->add_view(btn_install);
 
         auto btn_run = ButtonBuilder::create()
-            ->text("▶ Run")
+            ->text("Run")
             ->flat(true)
-            ->bold(true)
-            ->padding(10, 8)
+            ->padding(12, 8)
             ->onClick([b_name, input_pkg]() {
                 std::string app = input_pkg->get_text();
                 size_t first = app.find_first_not_of(" \t\n\r");
@@ -443,27 +521,10 @@ void TestbedView::rebuild_boxes_list() {
         box_col->add_view(form_row);
         box_col->add_view(box_progress);
 
-        // ---------------------------------------------------------------------
-        // Row 3: Installed Sandbox Apps List
-        // ---------------------------------------------------------------------
-        auto apps_hdr = TextViewBuilder::create()
-            ->text("Installed Sandbox Apps (" + std::to_string(box.installed_packages.size()) + ")")
-            ->bold(true)
-            ->build();
-        apps_hdr->set_margin(0, 6, 0, 6);
-        box_col->add_view(apps_hdr);
+        // --- Row 3: Installed Sandbox Apps ---
+        if (!box.installed_packages.empty()) {
+            box_col->add_view(DividerViewBuilder::create()->build());
 
-        if (box.installed_packages.empty()) {
-            auto no_apps = TextViewBuilder::create()
-                ->text("No test apps installed yet. Type a package name above to install.")
-                ->caption()
-                ->muted()
-                ->multiline(true)
-                ->ellipsize(false)
-                ->build();
-            no_apps->set_margin(0, 2, 0, 4);
-            box_col->add_view(no_apps);
-        } else {
             auto apps_list = std::make_shared<LinearLayout>(Orientation::Vertical);
             apps_list->set_layout_params(LayoutParams(
                 static_cast<int>(LayoutDimension::MatchParent),
@@ -480,11 +541,7 @@ void TestbedView::rebuild_boxes_list() {
                     static_cast<int>(LayoutDimension::WrapContent),
                     Gravity::CenterVertical
                 ));
-                app_row->set_margin(0, 4, 0, 4);
-
-                auto auto_cfg = Config::get();
-                auto a_badge = ui::make_icon_badge("utilities-terminal", auto_cfg->colors.surface_variant, 24, 6, 8);
-                app_row->add_view(a_badge);
+                app_row->set_padding(0, 8);
 
                 auto a_col = std::make_shared<LinearLayout>(Orientation::Vertical);
                 a_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
@@ -502,9 +559,8 @@ void TestbedView::rebuild_boxes_list() {
                 app_row->add_view(a_col);
 
                 auto btn_launch = ButtonBuilder::create()
-                    ->text("▶ Launch GUI")
+                    ->text("Launch GUI")
                     ->flat(true)
-                    ->bold(true)
                     ->padding(10, 6)
                     ->onClick([b_name, p_name]() {
                         SecurityBackend::launch_testbed_app(b_name, p_name);
@@ -514,14 +570,14 @@ void TestbedView::rebuild_boxes_list() {
                 app_row->add_view(btn_launch);
 
                 auto btn_uninstall = ButtonBuilder::create()
-                    ->text("✕ Remove")
+                    ->text("Remove")
                     ->flat(true)
                     ->padding(10, 6)
                     ->build();
                 std::weak_ptr<Button> weak_uninst = btn_uninstall;
                 btn_uninstall->set_on_click_listener([this, b_name, p_name, weak_uninst]() {
                     if (auto b = weak_uninst.lock()) {
-                        b->set_text("⏳ Removing...");
+                        b->set_text("Removing...");
                     }
                     std::thread([this, b_name, p_name]() {
                         SecurityBackend::remove_testbed_package(b_name, p_name);
@@ -535,13 +591,17 @@ void TestbedView::rebuild_boxes_list() {
                 app_row->add_view(btn_uninstall);
 
                 apps_list->add_view(app_row);
+
+                if (j + 1 < box.installed_packages.size()) {
+                    apps_list->add_view(DividerViewBuilder::create()->build());
+                }
             }
             box_col->add_view(apps_list);
         }
 
-        m_boxes_container->add_view(box_col);
+        card->add_view(box_col);
+        m_boxes_container->add_view(card);
     }
 }
 
 } // namespace miqusecure
-

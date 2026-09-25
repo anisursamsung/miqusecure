@@ -2,24 +2,14 @@
 #include "ui_components.hpp"
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 
 using namespace miqu;
 
 namespace miqusecure {
 
-static std::string get_proc_icon(const std::string& name) {
-    std::string lower = name;
-    for (char& c : lower) c = std::tolower(c);
-
-    if (lower.find("firefox") != std::string::npos || lower.find("browser") != std::string::npos) return "firefox";
-    if (lower.find("music") != std::string::npos || lower.find("mpd") != std::string::npos || lower.find("spotify") != std::string::npos) return "audio-x-generic";
-    if (lower.find("antigravity") != std::string::npos || lower.find("code") != std::string::npos) return "utilities-terminal";
-    if (lower.find("server") != std::string::npos || lower.find("daemon") != std::string::npos) return "preferences-system";
-    if (lower.find("waybar") != std::string::npos || lower.find("miqu") != std::string::npos) return "computer";
-    if (lower.find("curl") != std::string::npos || lower.find("wget") != std::string::npos) return "package-x-generic";
-    if (lower.find("systemd") != std::string::npos) return "security-high";
-    return "network-workgroup";
-}
+static const Color COLOR_ACTIVE_GREEN(0.188f, 0.820f, 0.345f, 1.0f); // #30d158
+static const Color COLOR_WARN_AMBER(0.980f, 0.700f, 0.200f, 1.0f);   // #fab387
 
 TrafficView::TrafficView(const TrafficReport& traffic)
     : m_traffic(traffic) {
@@ -33,77 +23,95 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(22, 18);
+    m_layout->set_padding(24, 16);
 
-    // =========================================================================
-    // 1. TOP METRIC STRIP (Direct Placement)
-    // =========================================================================
-    auto auto_cfg = Config::get();
-    auto metrics_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    metrics_row->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    metrics_row->set_margin(0, 4, 0, 20);
+    setup_metrics_hero();
+    setup_filter_bar();
+    setup_connections_section();
+    setup_feed_section();
 
-    auto make_metric_item = [](const std::string& icon, const Color& badge_color, const std::string& label, std::shared_ptr<TextView>& out_val) {
-        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-        col->set_layout_params(LayoutParams(
-            0,
-            static_cast<int>(LayoutDimension::WrapContent),
-            1.0f
-        ));
-        col->set_margin(4, 0, 4, 0);
+    set_content_view(m_layout);
+    update_info(m_traffic);
+}
 
-        auto hdr_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-        hdr_row->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent),
-            Gravity::CenterVertical
-        ));
+// =============================================================================
+// 1. TOP METRICS HERO INSET CARD
+// =============================================================================
+void TrafficView::setup_metrics_hero() {
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(18, 14)
+        ->build();
+    card->set_margin(0, 4, 0, 10);
 
-        auto badge = ui::make_icon_badge(icon, badge_color, 24, 6, 8);
-        auto lbl_tv = TextViewBuilder::create()->text(label)->caption()->muted()->multiline(true)->ellipsize(false)->build();
-
-        hdr_row->add_view(badge);
-        hdr_row->add_view(lbl_tv);
-        col->add_view(hdr_row);
-
-        out_val = TextViewBuilder::create()->text("--")->h2()->bold(true)->ellipsize(true)->build();
-        out_val->set_margin(0, 4, 0, 0);
-        col->add_view(out_val);
-
-        return col;
-    };
-
-    metrics_row->add_view(make_metric_item("network-wired", auto_cfg->colors.surface_variant, "Sockets", m_outbound_badge));
-    metrics_row->add_view(make_metric_item("security-high", auto_cfg->colors.primary_container, "TLS Secure", m_encrypted_badge));
-    metrics_row->add_view(make_metric_item("utilities-system-monitor", auto_cfg->colors.surface_variant, "Throughput", m_bandwidth_badge));
-    metrics_row->add_view(make_metric_item("package-x-generic", auto_cfg->colors.surface_variant, "Apps", m_apps_badge));
-    m_layout->add_view(metrics_row);
-
-    // =========================================================================
-    // 2. FILTER & CONTROLS BAR (Direct Placement)
-    // =========================================================================
-    auto filter_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    filter_row->set_layout_params(LayoutParams(
+    auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    filter_row->set_margin(0, 4, 0, 20);
+
+    auto make_metric_col = [](const std::string& caption_text, std::shared_ptr<TextView>& out_val) {
+        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
+        col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+
+        out_val = TextViewBuilder::create()->text("--")->h2()->bold(true)->build();
+        out_val->set_margin(0, 0, 0, 2);
+
+        auto lbl = TextViewBuilder::create()->text(caption_text)->caption()->muted()->build();
+
+        col->add_view(out_val);
+        col->add_view(lbl);
+        return col;
+    };
+
+    row->add_view(make_metric_col("ACTIVE SOCKETS", m_outbound_badge));
+    row->add_view(DividerViewBuilder::create()->orientation(Orientation::Vertical)->thickness(1)->margin(12, 4)->build());
+
+    row->add_view(make_metric_col("TLS ENCRYPTED", m_encrypted_badge));
+    row->add_view(DividerViewBuilder::create()->orientation(Orientation::Vertical)->thickness(1)->margin(12, 4)->build());
+
+    row->add_view(make_metric_col("BANDWIDTH RX/TX", m_bandwidth_badge));
+    row->add_view(DividerViewBuilder::create()->orientation(Orientation::Vertical)->thickness(1)->margin(12, 4)->build());
+
+    row->add_view(make_metric_col("ACTIVE PROCESSES", m_apps_badge));
+
+    card->add_view(row);
+    m_layout->add_view(card);
+}
+
+// =============================================================================
+// 2. SCOPE & SEARCH FILTER BAR
+// =============================================================================
+void TrafficView::setup_filter_bar() {
+    auto sec_hdr = ui::make_section_header("TRAFFIC SCOPE & FILTERS");
+    m_layout->add_view(sec_hdr);
+
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(14, 10)
+        ->build();
+    card->set_margin(0, 0, 0, 10);
+
+    auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
 
     std::vector<std::string> scope_items = {
-        "🌐 Internet Only",
-        "🔍 All Traffic (inc. Local)",
-        "💻 Localhost Only",
-        "🛡️ Encrypted Only (TLS)"
+        "Internet Only",
+        "All Traffic (inc. Local)",
+        "Localhost Only",
+        "Encrypted Only (TLS)"
     };
 
     m_spinner_scope = SpinnerBuilder::create()
         ->items(scope_items)
         ->selectedIndex(static_cast<int>(m_scope_mode))
-        ->padding(10, 8)
+        ->padding(12, 6)
+        ->cornerRadius(8)
         ->onItemSelected([this](int idx, const std::string&) {
             m_scope_mode = static_cast<TrafficScopeMode>(idx);
             rebuild_active_connections();
@@ -111,88 +119,127 @@ TrafficView::TrafficView(const TrafficReport& traffic)
         ->build();
     m_spinner_scope->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::WrapContent),
-        static_cast<int>(LayoutDimension::WrapContent)
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
     ));
-    m_spinner_scope->set_margin(0, 0, 10, 0);
-    filter_row->add_view(m_spinner_scope);
+    m_spinner_scope->set_margin(0, 0, 12, 0);
+    row->add_view(m_spinner_scope);
 
-    m_search_input = std::make_shared<EditText>();
-    m_search_input->set_hint("Filter by app, domain, or IP...");
+    m_search_input = EditTextBuilder::create()
+        ->hint("Filter by process, host, or port...")
+        ->padding(10, 8)
+        ->build();
     m_search_input->set_layout_params(LayoutParams(
         0,
-        34,
+        static_cast<int>(LayoutDimension::WrapContent),
         1.0f
     ));
     m_search_input->set_on_text_changed_listener([this](std::shared_ptr<EditText>, const std::string& text) {
         m_search_filter = text;
         rebuild_active_connections();
     });
-    filter_row->add_view(m_search_input);
+    row->add_view(m_search_input);
 
-    auto live_badge = TextViewBuilder::create()
-        ->text("● Press R or ↻ to Refresh")
-        ->caption()
-        ->muted()
+    card->add_view(row);
+    m_layout->add_view(card);
+}
+
+// =============================================================================
+// 3. ACTIVE SOCKET CONNECTIONS TABLE
+// =============================================================================
+void TrafficView::setup_connections_section() {
+    auto sec_hdr = ui::make_section_header("ACTIVE SOCKET CONNECTIONS");
+    m_layout->add_view(sec_hdr);
+
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(18, 12)
         ->build();
-    live_badge->set_margin(10, 0, 4, 0);
-    filter_row->add_view(live_badge);
+    card->set_margin(0, 0, 0, 10);
 
-    m_layout->add_view(filter_row);
-
-    // =========================================================================
-    // 3. RECENT REQUEST ACTIVITY STREAM
-    // =========================================================================
-    m_feed_container = std::make_shared<LinearLayout>(Orientation::Vertical);
-    m_feed_container->set_layout_params(LayoutParams(
+    auto box = std::make_shared<LinearLayout>(Orientation::Vertical);
+    box->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_feed_container->set_margin(0, 0, 0, 20);
-    m_layout->add_view(m_feed_container);
 
-    // =========================================================================
-    // 4. ACTIVE NETWORK SOCKETS TABLE
-    // =========================================================================
+    // Table Header Row
+    auto table_hdr = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    table_hdr->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+    table_hdr->set_padding(0, 2, 0, 8);
+
+    auto h_app = TextViewBuilder::create()->text("APPLICATION / PID")->caption()->bold(true)->muted()->build();
+    h_app->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.3f));
+
+    auto h_dest = TextViewBuilder::create()->text("REMOTE DESTINATION")->caption()->bold(true)->muted()->build();
+    h_dest->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.8f));
+
+    auto h_proto = TextViewBuilder::create()->text("PROTOCOL")->caption()->bold(true)->muted()->build();
+    h_proto->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 0.6f));
+
+    auto h_sec = TextViewBuilder::create()->text("SECURITY")->caption()->bold(true)->muted()->build();
+    h_sec->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 0.8f));
+
+    auto h_act = TextViewBuilder::create()->text("ACTIONS")->caption()->bold(true)->muted()->textAlignment(TextAlignment::Right)->build();
+    h_act->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 0.5f));
+
+    table_hdr->add_view(h_app);
+    table_hdr->add_view(h_dest);
+    table_hdr->add_view(h_proto);
+    table_hdr->add_view(h_sec);
+    table_hdr->add_view(h_act);
+    box->add_view(table_hdr);
+
+    box->add_view(DividerViewBuilder::create()->build());
+
     m_conn_container = std::make_shared<LinearLayout>(Orientation::Vertical);
     m_conn_container->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_conn_container->set_margin(0, 0, 0, 20);
-    m_layout->add_view(m_conn_container);
+    box->add_view(m_conn_container);
 
-    // =========================================================================
-    // 5. EDUCATIONAL CALLOUT (Direct Placement)
-    // =========================================================================
-    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    guide_col->set_layout_params(LayoutParams(
+    card->add_view(box);
+    m_layout->add_view(card);
+}
+
+// =============================================================================
+// 4. LIVE RECENT ACTIVITY FEED
+// =============================================================================
+void TrafficView::setup_feed_section() {
+    auto sec_hdr = ui::make_section_header("RECENT ACTIVITY FEED");
+    m_layout->add_view(sec_hdr);
+
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(18, 12)
+        ->build();
+    card->set_margin(0, 0, 0, 24);
+
+    auto box = std::make_shared<LinearLayout>(Orientation::Vertical);
+    box->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    guide_col->set_margin(0, 18, 0, 24);
 
-    auto g_title = TextViewBuilder::create()->text("💡 Why Monitor Network Traffic?")->bold(true)->build();
-    auto g_desc = TextViewBuilder::create()
-        ->text("Inspect real-time socket connections to confirm background applications are communicating safely over encrypted channels.")
-        ->caption()
-        ->muted()
-        ->multiline(true)
-        ->ellipsize(false)
-        ->build();
-    g_desc->set_margin(0, 4, 0, 0);
+    m_feed_container = std::make_shared<LinearLayout>(Orientation::Vertical);
+    m_feed_container->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    box->add_view(m_feed_container);
 
-    guide_col->add_view(g_title);
-    guide_col->add_view(g_desc);
-    m_layout->add_view(guide_col);
-
-    set_content_view(m_layout);
-    update_info(m_traffic);
+    card->add_view(box);
+    m_layout->add_view(card);
 }
 
 void TrafficView::update_info(const TrafficReport& traffic) {
     m_traffic = traffic;
 
-    // 1. Update metric badges
     if (m_outbound_badge) {
         m_outbound_badge->set_text(std::to_string(m_traffic.total_outbound));
     }
@@ -209,91 +256,8 @@ void TrafficView::update_info(const TrafficReport& traffic) {
         m_apps_badge->set_text(std::to_string(m_traffic.total_apps));
     }
 
-    rebuild_recent_feed();
     rebuild_active_connections();
-}
-
-void TrafficView::rebuild_recent_feed() {
-    if (!m_feed_container) return;
-    m_feed_container->clear_views();
-
-    auto sec_hdr = ui::make_section_header("LIVE OUTBOUND TRAFFIC FEED");
-    sec_hdr->set_margin(0, 18, 0, 12);
-    m_feed_container->add_view(sec_hdr);
-
-    auto cfg = Config::get();
-    auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    list_col->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-
-    if (m_traffic.recent_events.empty()) {
-        auto empty_tv = TextViewBuilder::create()
-            ->text("Listening for outbound requests... New socket connections will appear here in real time.")
-            ->caption()
-            ->muted()
-            ->multiline(true)
-            ->ellipsize(false)
-            ->build();
-        empty_tv->set_margin(0, 4, 0, 8);
-        list_col->add_view(empty_tv);
-    } else {
-        size_t count = std::min(m_traffic.recent_events.size(), static_cast<size_t>(10));
-        for (size_t i = 0; i < count; ++i) {
-            const auto& event = m_traffic.recent_events[i];
-            auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-            row->set_layout_params(LayoutParams(
-                static_cast<int>(LayoutDimension::MatchParent),
-                static_cast<int>(LayoutDimension::WrapContent),
-                Gravity::CenterVertical
-            ));
-            row->set_margin(0, 8, 0, 8);
-
-            auto time_tv = TextViewBuilder::create()->text(event.timestamp)->caption()->muted()->build();
-            time_tv->set_margin(0, 0, 8, 0);
-            row->add_view(time_tv);
-
-            auto badge = ui::make_icon_badge(get_proc_icon(event.process_name), cfg->colors.surface_variant, 24, 6, 8);
-            row->add_view(badge);
-
-            auto proc_tv = TextViewBuilder::create()->text(event.process_name)->bold(true)->caption()->build();
-            proc_tv->set_margin(0, 0, 8, 0);
-            row->add_view(proc_tv);
-
-            auto arrow_tv = TextViewBuilder::create()->text("→")->caption()->muted()->build();
-            arrow_tv->set_margin(0, 0, 8, 0);
-            row->add_view(arrow_tv);
-
-            auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-            col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
-
-            std::string dest_label = event.remote_host;
-            if (dest_label.empty() || dest_label == event.remote_addr) {
-                dest_label = event.remote_addr + ":" + std::to_string(event.remote_port);
-            } else {
-                dest_label += " (" + event.remote_addr + ":" + std::to_string(event.remote_port) + ")";
-            }
-
-            auto target_tv = TextViewBuilder::create()
-                ->text(dest_label)
-                ->caption()
-                ->multiline(true)
-                ->ellipsize(false)
-                ->build();
-            col->add_view(target_tv);
-            row->add_view(col);
-
-            std::string badge_str = event.is_encrypted ? ("🛡️ " + event.service_name) : ("⚠️ " + event.service_name);
-            std::shared_ptr<TextView> out_lbl;
-            auto pill = ui::make_status_pill(badge_str, out_lbl, event.is_encrypted ? cfg->colors.primary_container : cfg->colors.surface_variant);
-            row->add_view(pill);
-
-            list_col->add_view(row);
-        }
-    }
-
-    m_feed_container->add_view(list_col);
+    rebuild_recent_feed();
 }
 
 void TrafficView::rebuild_active_connections() {
@@ -331,110 +295,192 @@ void TrafficView::rebuild_active_connections() {
         filtered.push_back(conn);
     }
 
-    auto sec_hdr = ui::make_section_header("ACTIVE SOCKET CONNECTIONS (" + std::to_string(filtered.size()) + ")");
-    sec_hdr->set_margin(0, 18, 0, 12);
-    m_conn_container->add_view(sec_hdr);
-
-    auto list_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    list_col->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-
-    auto cfg = Config::get();
     if (filtered.empty()) {
-        std::string empty_msg;
-        switch (m_scope_mode) {
-            case TrafficScopeMode::InternetOnly:
-                empty_msg = "No active outbound internet connections matching filter.";
-                break;
-            case TrafficScopeMode::LocalOnly:
-                empty_msg = "No active localhost/loopback connections matching filter.";
-                break;
-            case TrafficScopeMode::EncryptedOnly:
-                empty_msg = "No encrypted TLS connections matching filter.";
-                break;
-            case TrafficScopeMode::All:
-            default:
-                empty_msg = "No active network sockets detected.";
-                break;
-        }
+        auto empty_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+        empty_row->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::MatchParent),
+            static_cast<int>(LayoutDimension::WrapContent),
+            Gravity::CenterVertical
+        ));
+        empty_row->set_padding(0, 14);
+
         auto empty_tv = TextViewBuilder::create()
-            ->text(empty_msg)
+            ->text("No active network sockets matching the current scope and filter.")
             ->caption()
             ->muted()
-            ->multiline(true)
-            ->ellipsize(false)
             ->build();
-        empty_tv->set_margin(0, 4, 0, 8);
-        list_col->add_view(empty_tv);
-    } else {
-        for (size_t i = 0; i < filtered.size(); ++i) {
-            const auto& conn = filtered[i];
-            auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-            row->set_layout_params(LayoutParams(
-                static_cast<int>(LayoutDimension::MatchParent),
-                static_cast<int>(LayoutDimension::WrapContent),
-                Gravity::CenterVertical
-            ));
-            row->set_margin(0, 8, 0, 8);
-
-            auto badge = ui::make_icon_badge(get_proc_icon(conn.process_name), cfg->colors.surface_variant, 32, 8, 12);
-            row->add_view(badge);
-
-            auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-            col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
-
-            auto name_tv = TextViewBuilder::create()
-                ->text(conn.process_name + (conn.pid > 0 ? (" (PID " + std::to_string(conn.pid) + ")") : ""))
-                ->bold(true)
-                ->build();
-
-            std::string dest_desc = conn.remote_host;
-            if (dest_desc.empty() || dest_desc == conn.remote_addr) {
-                dest_desc = conn.remote_addr + ":" + std::to_string(conn.remote_port);
-            } else {
-                dest_desc += " • " + conn.remote_addr + ":" + std::to_string(conn.remote_port);
-            }
-
-            auto dest_tv = TextViewBuilder::create()
-                ->text(dest_desc)
-                ->caption()
-                ->muted()
-                ->multiline(true)
-                ->ellipsize(false)
-                ->build();
-            dest_tv->set_margin(0, 2, 0, 0);
-
-            col->add_view(name_tv);
-            col->add_view(dest_tv);
-            row->add_view(col);
-
-            std::string svc_badge = conn.is_encrypted ? ("🛡️ " + conn.service_name) : (conn.is_loopback ? "💻 Local" : ("⚠️ " + conn.service_name));
-            std::shared_ptr<TextView> out_s;
-            auto pill = ui::make_status_pill(svc_badge, out_s, conn.is_encrypted ? cfg->colors.primary_container : cfg->colors.surface_variant);
-            pill->set_margin(0, 0, 8, 0);
-            row->add_view(pill);
-
-            if (conn.pid > 1) {
-                int pid = conn.pid;
-                auto btn_end = ButtonBuilder::create()
-                    ->text("🛑 End")
-                    ->flat(true)
-                    ->bold(true)
-                    ->padding(10, 6)
-                    ->onClick([pid, this]() {
-                        SecurityBackend::terminate_process(pid, false);
-                    })
-                    ->build();
-                row->add_view(btn_end);
-            }
-
-            list_col->add_view(row);
-        }
+        empty_row->add_view(empty_tv);
+        m_conn_container->add_view(empty_row);
+        return;
     }
 
-    m_conn_container->add_view(list_col);
+    for (size_t i = 0; i < filtered.size(); ++i) {
+        const auto& conn = filtered[i];
+        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+        row->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::MatchParent),
+            static_cast<int>(LayoutDimension::WrapContent),
+            Gravity::CenterVertical
+        ));
+        row->set_padding(0, 10);
+
+        // Col 1: App + PID
+        auto app_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+        app_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.3f));
+
+        auto app_tv = TextViewBuilder::create()
+            ->text(conn.process_name)
+            ->bold(true)
+            ->ellipsize(true)
+            ->build();
+        auto pid_tv = TextViewBuilder::create()
+            ->text(conn.pid > 0 ? ("PID " + std::to_string(conn.pid)) : "System")
+            ->caption()
+            ->muted()
+            ->build();
+
+        app_col->add_view(app_tv);
+        app_col->add_view(pid_tv);
+        row->add_view(app_col);
+
+        // Col 2: Remote Destination
+        std::string dest_desc = conn.remote_host;
+        if (dest_desc.empty() || dest_desc == conn.remote_addr) {
+            dest_desc = conn.remote_addr + ":" + std::to_string(conn.remote_port);
+        } else {
+            dest_desc += ":" + std::to_string(conn.remote_port);
+        }
+
+        auto dest_tv = TextViewBuilder::create()
+            ->text(dest_desc)
+            ->caption()
+            ->ellipsize(true)
+            ->build();
+        dest_tv->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.8f));
+        row->add_view(dest_tv);
+
+        // Col 3: Protocol
+        auto proto_tv = TextViewBuilder::create()
+            ->text(conn.protocol)
+            ->caption()
+            ->muted()
+            ->build();
+        proto_tv->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 0.6f));
+        row->add_view(proto_tv);
+
+        // Col 4: Security
+        auto sec_tv = TextViewBuilder::create()
+            ->text(conn.is_encrypted ? "TLS" : (conn.is_loopback ? "Local" : "Plaintext"))
+            ->caption()
+            ->bold(true)
+            ->textColor(conn.is_encrypted ? COLOR_ACTIVE_GREEN : (conn.is_loopback ? Color(0.7f, 0.7f, 0.8f, 1.0f) : COLOR_WARN_AMBER))
+            ->build();
+        sec_tv->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 0.8f));
+        row->add_view(sec_tv);
+
+        // Col 5: Actions
+        auto act_box = std::make_shared<LinearLayout>(Orientation::Horizontal);
+        auto act_box_lp = LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 0.5f);
+        act_box_lp.gravity = Gravity::End;
+        act_box->set_layout_params(act_box_lp);
+
+        if (conn.pid > 1) {
+            int pid = conn.pid;
+            auto btn_end = ButtonBuilder::create()
+                ->text("End")
+                ->flat(true)
+                ->padding(8, 4)
+                ->onClick([pid]() {
+                    SecurityBackend::terminate_process(pid, false);
+                })
+                ->build();
+            act_box->add_view(btn_end);
+        }
+        row->add_view(act_box);
+
+        m_conn_container->add_view(row);
+
+        if (i + 1 < filtered.size()) {
+            m_conn_container->add_view(DividerViewBuilder::create()->build());
+        }
+    }
+}
+
+void TrafficView::rebuild_recent_feed() {
+    if (!m_feed_container) return;
+    m_feed_container->clear_views();
+
+    if (m_traffic.recent_events.empty()) {
+        auto empty_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+        empty_row->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::MatchParent),
+            static_cast<int>(LayoutDimension::WrapContent),
+            Gravity::CenterVertical
+        ));
+        empty_row->set_padding(0, 14);
+
+        auto empty_tv = TextViewBuilder::create()
+            ->text("Listening for outbound requests... New socket connections will appear here in real time.")
+            ->caption()
+            ->muted()
+            ->build();
+        empty_row->add_view(empty_tv);
+        m_feed_container->add_view(empty_row);
+        return;
+    }
+
+    size_t count = std::min(m_traffic.recent_events.size(), static_cast<size_t>(10));
+    for (size_t i = 0; i < count; ++i) {
+        const auto& event = m_traffic.recent_events[i];
+        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+        row->set_layout_params(LayoutParams(
+            static_cast<int>(LayoutDimension::MatchParent),
+            static_cast<int>(LayoutDimension::WrapContent),
+            Gravity::CenterVertical
+        ));
+        row->set_padding(0, 10);
+
+        auto time_tv = TextViewBuilder::create()->text(event.timestamp)->caption()->muted()->build();
+        time_tv->set_margin(0, 0, 12, 0);
+        row->add_view(time_tv);
+
+        auto proc_tv = TextViewBuilder::create()->text(event.process_name)->bold(true)->caption()->build();
+        proc_tv->set_margin(0, 0, 10, 0);
+        row->add_view(proc_tv);
+
+        auto arrow_tv = TextViewBuilder::create()->text("→")->caption()->muted()->build();
+        arrow_tv->set_margin(0, 0, 10, 0);
+        row->add_view(arrow_tv);
+
+        std::string dest_label = event.remote_host;
+        if (dest_label.empty() || dest_label == event.remote_addr) {
+            dest_label = event.remote_addr + ":" + std::to_string(event.remote_port);
+        } else {
+            dest_label += " (" + event.remote_addr + ":" + std::to_string(event.remote_port) + ")";
+        }
+
+        auto target_tv = TextViewBuilder::create()
+            ->text(dest_label)
+            ->caption()
+            ->ellipsize(true)
+            ->build();
+        target_tv->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+        row->add_view(target_tv);
+
+        auto sec_tv = TextViewBuilder::create()
+            ->text(event.is_encrypted ? "TLS" : "Plain")
+            ->caption()
+            ->bold(true)
+            ->textColor(event.is_encrypted ? COLOR_ACTIVE_GREEN : COLOR_WARN_AMBER)
+            ->build();
+        row->add_view(sec_tv);
+
+        m_feed_container->add_view(row);
+
+        if (i + 1 < count) {
+            m_feed_container->add_view(DividerViewBuilder::create()->build());
+        }
+    }
 }
 
 } // namespace miqusecure

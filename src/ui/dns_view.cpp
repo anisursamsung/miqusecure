@@ -6,6 +6,9 @@ using namespace miqu;
 
 namespace miqusecure {
 
+static const Color COLOR_ACTIVE_GREEN(0.188f, 0.820f, 0.345f, 1.0f); // #30d158
+static const Color COLOR_INACTIVE_GRAY(0.545f, 0.545f, 0.600f, 1.0f); // #8b8b99
+
 DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
     : m_info(info), m_on_changed(std::move(on_changed)) {
     set_layout_params(LayoutParams(
@@ -18,62 +21,94 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_layout->set_padding(22, 18);
+    m_layout->set_padding(24, 16);
 
-    // =========================================================================
-    // 1. MASTER DNS PROTECTION HERO (Direct Placement)
-    // =========================================================================
-    auto auto_cfg = Config::get();
-    auto hero_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    hero_row->set_layout_params(LayoutParams(
+    setup_master_card();
+    setup_resolver_card();
+
+    // Docked 3px indeterminate progress bar
+    m_progress_bar = ProgressBarBuilder::create()
+        ->style(ProgressBarStyle::Linear)
+        ->indeterminate(true)
+        ->trackHeight(3)
+        ->build();
+    m_progress_bar->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        3
+    ));
+    m_progress_bar->set_margin(0, 0, 0, 10);
+    m_progress_bar->set_visibility(Visibility::Invisible);
+    m_layout->add_view(m_progress_bar);
+
+    set_content_view(m_layout);
+}
+
+// =============================================================================
+// 1. MASTER DNS PROTECTION CARD
+// =============================================================================
+void DnsView::setup_master_card() {
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(18, 14)
+        ->build();
+    card->set_margin(0, 4, 0, 14);
+
+    auto master_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    master_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent),
         Gravity::CenterVertical
     ));
-    hero_row->set_margin(0, 4, 0, 20);
 
-    auto hero_badge = ui::make_icon_badge(
-        m_info.encrypted ? "network-vpn" : "dialog-warning",
-        m_info.encrypted ? auto_cfg->colors.primary_container : auto_cfg->colors.surface_variant,
-        34, 8, 14
-    );
-    hero_row->add_view(hero_badge);
+    // Crisp 8px indicator dot
+    m_status_dot = std::make_shared<FrameLayout>();
+    m_status_dot->set_layout_params(LayoutParams(8, 8, Gravity::CenterVertical));
+    m_status_dot->set_corner_radius(4);
+    m_status_dot->set_margin(0, 0, 14, 0);
+    update_status_indicator(m_info.encrypted);
+    master_row->add_view(m_status_dot);
 
-    auto hero_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    hero_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
-
-    std::string title_text = m_info.encrypted ?
-        (m_info.active_provider + " Protection Active") :
-        "Standard Router DNS (Unencrypted)";
+    // Text column
+    auto text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    text_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
 
     m_status_lbl = TextViewBuilder::create()
-        ->text(title_text)
-        ->h2()
+        ->text(m_info.encrypted ? "DNS Protection is Active" : "DNS Protection is Disabled")
         ->bold(true)
         ->build();
-    m_status_lbl->set_margin(0, 0, 0, 4);
+    m_status_lbl->set_margin(0, 0, 0, 3);
 
-    std::string desc_text = m_info.encrypted ?
-        "Encrypted DNS lookups shield web navigation from ISP surveillance and network hijacking." :
-        "DNS queries are routed unencrypted through default ISP/router nameservers.";
+    std::string sub_str = "Route and encrypt lookups via ";
+    if (m_info.encrypted) {
+        sub_str += m_info.active_provider.empty() ? "Encrypted DNS" : m_info.active_provider;
+    } else {
+        sub_str = "Using unencrypted upstream nameservers (DHCP / ISP)";
+    }
+    if (!m_info.active_connection_name.empty()) {
+        sub_str += " • " + m_info.active_connection_name;
+    }
 
-    m_status_desc = TextViewBuilder::create()
-        ->text(desc_text)
+    m_subtitle_lbl = TextViewBuilder::create()
+        ->text(sub_str)
         ->caption()
         ->muted()
         ->multiline(true)
         ->ellipsize(false)
         ->build();
-    m_status_desc->set_margin(0, 2, 0, 0);
 
-    hero_col->add_view(m_status_lbl);
-    hero_col->add_view(m_status_desc);
-    hero_row->add_view(hero_col);
+    text_col->add_view(m_status_lbl);
+    text_col->add_view(m_subtitle_lbl);
+    master_row->add_view(text_col);
 
-    // Master Switch on right
     m_switch_master = SwitchBuilder::create()
         ->checked(m_info.encrypted)
         ->build();
+    m_switch_master->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::WrapContent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+
     std::weak_ptr<Switch> weak_master = m_switch_master;
     m_switch_master->set_on_checked_changed_listener([this, weak_master](bool checked) {
         if (m_updating_ui) return;
@@ -82,7 +117,13 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
         std::thread([this, checked, weak_master]() {
             bool ok = false;
             if (checked) {
-                ok = SecurityBackend::apply_dns("9.9.9.9", "149.112.112.112");
+                int idx = m_spinner_provider ? m_spinner_provider->get_selected_index() : 0;
+                std::string p_ip = "9.9.9.9";
+                std::string s_ip = "149.112.112.112";
+                if (idx == 1) { p_ip = "94.140.14.14"; s_ip = "94.140.15.15"; }
+                else if (idx == 2) { p_ip = "194.242.2.3"; s_ip = "194.242.2.4"; }
+                else if (idx == 3) { p_ip = "1.1.1.1"; s_ip = "1.0.0.1"; }
+                ok = SecurityBackend::apply_dns(p_ip, s_ip);
             } else {
                 ok = SecurityBackend::restore_default_dns();
             }
@@ -103,313 +144,319 @@ DnsView::DnsView(const DnsInfo& info, std::function<void()> on_changed)
             }
         }).detach();
     });
-    hero_row->add_view(m_switch_master);
-    m_layout->add_view(hero_row);
+    master_row->add_view(m_switch_master);
 
-    // Docked 3px progress bar
-    m_progress_bar = ProgressBarBuilder::create()
-        ->style(ProgressBarStyle::Linear)
-        ->indeterminate(true)
-        ->trackHeight(3)
+    card->add_view(master_row);
+    m_layout->add_view(card);
+}
+
+// =============================================================================
+// 2. DNS RESOLVER CONFIGURATION CARD (PROVIDER DROPDOWN & CUSTOM NAMESERVERS)
+// =============================================================================
+void DnsView::setup_resolver_card() {
+    auto card = CardViewBuilder::create()
+        ->style(CardStyle::Outlined)
+        ->padding(18, 6)
         ->build();
-    m_progress_bar->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        3
-    ));
-    m_progress_bar->set_margin(0, 0, 0, 16);
-    m_progress_bar->set_visibility(Visibility::Invisible);
-    m_layout->add_view(m_progress_bar);
+    card->set_margin(0, 0, 0, 10);
 
-    // =========================================================================
-    // 2. 1-CLICK TRUSTED PRIVACY RESOLVERS (Direct Placement)
-    // =========================================================================
-    auto sec_res_hdr = ui::make_section_header("PRIVACY & SECURITY RESOLVERS");
-    sec_res_hdr->set_margin(0, 18, 0, 12);
-    m_layout->add_view(sec_res_hdr);
-
-    auto res_list = std::make_shared<LinearLayout>(Orientation::Vertical);
-    res_list->set_layout_params(LayoutParams(
+    auto box = std::make_shared<LinearLayout>(Orientation::Vertical);
+    box->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    res_list->set_margin(0, 4, 0, 20);
 
-    auto make_resolver_row = [this](const std::string& icon,
-                                    const std::string& title,
-                                    const std::string& desc,
-                                    const std::string& primary_ip, const std::string& secondary_ip,
-                                    bool is_active, std::shared_ptr<Switch>& out_switch) {
-        auto cfg = Config::get();
-        auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-        row->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::WrapContent),
-            Gravity::CenterVertical
-        ));
-        row->set_margin(0, 10, 0, 10);
+    // Row 1: DNS Provider Dropdown
+    auto provider_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    provider_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+    provider_row->set_padding(0, 10);
 
-        auto badge = ui::make_icon_badge(icon, cfg->colors.surface_variant, 34, 8, 14);
-        row->add_view(badge);
+    auto prov_title = TextViewBuilder::create()->text("DNS Provider")->bold(true)->build();
+    prov_title->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+    provider_row->add_view(prov_title);
 
-        auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
-        col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+    std::vector<std::string> provider_items = {
+        "Quad9 (Malware Block)",
+        "AdGuard DNS (Ad Block)",
+        "Mullvad DNS (No-Log)",
+        "Cloudflare (High Speed)"
+    };
 
-        auto title_tv = TextViewBuilder::create()->text(title)->bold(true)->build();
-        auto desc_tv = TextViewBuilder::create()->text(desc)->caption()->muted()->multiline(true)->ellipsize(false)->build();
-        desc_tv->set_margin(0, 2, 0, 0);
-
-        col->add_view(title_tv);
-        col->add_view(desc_tv);
-        row->add_view(col);
-
-        auto sw = SwitchBuilder::create()
-            ->checked(is_active)
-            ->build();
-        sw->set_layout_params(LayoutParams(
-            static_cast<int>(LayoutDimension::WrapContent),
-            static_cast<int>(LayoutDimension::WrapContent),
-            Gravity::CenterVertical
-        ));
-        std::weak_ptr<Switch> weak_sw = sw;
-        sw->set_on_checked_changed_listener([this, primary_ip, secondary_ip, weak_sw](bool checked) {
+    m_spinner_provider = SpinnerBuilder::create()
+        ->items(provider_items)
+        ->selectedIndex(provider_to_index(m_info.active_provider))
+        ->padding(12, 6)
+        ->cornerRadius(8)
+        ->onItemSelected([this](int idx, const std::string&) {
             if (m_updating_ui) return;
+
+            std::string p_ip = "9.9.9.9";
+            std::string s_ip = "149.112.112.112";
+            switch (idx) {
+                case 1: p_ip = "94.140.14.14"; s_ip = "94.140.15.15"; break;
+                case 2: p_ip = "194.242.2.3"; s_ip = "194.242.2.4"; break;
+                case 3: p_ip = "1.1.1.1"; s_ip = "1.0.0.1"; break;
+                case 0:
+                default: p_ip = "9.9.9.9"; s_ip = "149.112.112.112"; break;
+            }
+
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-            std::thread([this, checked, primary_ip, secondary_ip, weak_sw]() {
-                bool ok = false;
-                if (checked) {
-                    ok = SecurityBackend::apply_dns(primary_ip, secondary_ip);
-                } else {
-                    ok = SecurityBackend::restore_default_dns();
-                }
-
+            std::thread([this, p_ip, s_ip]() {
+                bool ok = SecurityBackend::apply_dns(p_ip, s_ip);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, checked, ok, weak_sw]() {
+                    engine->post([this, ok]() {
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok) {
                             if (m_on_changed) m_on_changed();
                         } else {
                             m_updating_ui = true;
-                            if (auto s = weak_sw.lock()) {
-                                s->set_checked(!checked);
+                            if (m_spinner_provider) {
+                                m_spinner_provider->set_selected_index(provider_to_index(m_info.active_provider));
                             }
                             m_updating_ui = false;
                         }
                     });
                 }
             }).detach();
-        });
-        out_switch = sw;
-        row->add_view(out_switch);
-        return row;
-    };
-
-    bool is_quad9 = m_info.active_provider.find("Quad9") != std::string::npos;
-    bool is_adguard = m_info.active_provider.find("AdGuard") != std::string::npos;
-    bool is_mullvad = m_info.active_provider.find("Mullvad") != std::string::npos;
-    bool is_cloudflare = m_info.active_provider.find("Cloudflare") != std::string::npos;
-
-    // 1. Quad9
-    res_list->add_view(make_resolver_row("security-high", "Quad9 (Malware Block)",
-        "Encrypted DNS blocking malicious phishing and malware domains (9.9.9.9).",
-        "9.9.9.9", "149.112.112.112",
-        is_quad9, m_switch_quad9));
-
-    // 2. AdGuard
-    res_list->add_view(make_resolver_row("dialog-cancel", "AdGuard DNS (Ad Block)",
-        "System-wide sinkhole blocking advertisements and tracking telemetry (94.140.14.14).",
-        "94.140.14.14", "94.140.15.15",
-        is_adguard, m_switch_adguard));
-
-    // 3. Mullvad
-    res_list->add_view(make_resolver_row("network-vpn", "Mullvad DNS (No-Log)",
-        "Privacy-first encrypted resolver with strict zero logging (194.242.2.3).",
-        "194.242.2.3", "194.242.2.4",
-        is_mullvad, m_switch_mullvad));
-
-    // 4. Cloudflare
-    res_list->add_view(make_resolver_row("network-wireless", "Cloudflare (High Speed)",
-        "Ultra-low latency public resolver with privacy auditing (1.1.1.1).",
-        "1.1.1.1", "1.0.0.1",
-        is_cloudflare, m_switch_cloudflare));
-
-    m_layout->add_view(res_list);
-
-    // =========================================================================
-    // 3. CUSTOM DNS SERVER (Direct Placement)
-    // =========================================================================
-    auto sec_custom_hdr = ui::make_section_header("CUSTOM NAMESERVERS");
-    sec_custom_hdr->set_margin(0, 18, 0, 12);
-    m_layout->add_view(sec_custom_hdr);
-
-    auto custom_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    custom_col->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    custom_col->set_margin(0, 4, 0, 20);
-
-    auto c_top = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    c_top->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent),
-        Gravity::CenterVertical
-    ));
-    c_top->set_margin(0, 2, 0, 12);
-
-    auto c_badge = ui::make_icon_badge("preferences-system", auto_cfg->colors.surface_variant, 34, 8, 14);
-    c_top->add_view(c_badge);
-
-    auto c_text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    c_text_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
-    auto c_name = TextViewBuilder::create()->text("Manual IPv4 Nameservers")->bold(true)->build();
-    auto c_desc = TextViewBuilder::create()
-        ->text("Specify custom upstream nameserver addresses to override DHCP for the active network interface.")
-        ->caption()
-        ->muted()
-        ->multiline(true)
-        ->ellipsize(false)
-        ->build();
-    c_desc->set_margin(0, 3, 0, 0);
-    c_text_col->add_view(c_name);
-    c_text_col->add_view(c_desc);
-    c_top->add_view(c_text_col);
-    custom_col->add_view(c_top);
-
-    // Form row: Primary & Secondary IP Inputs & Apply Button
-    auto form_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    form_row->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent),
-        Gravity::CenterVertical
-    ));
-    form_row->set_margin(0, 4, 0, 8);
-
-    m_input_primary = EditTextBuilder::create()
-        ->hint("Primary IP (e.g. 1.1.1.1)")
-        ->padding(12, 8)
-        ->build();
-    m_input_primary->set_layout_params(LayoutParams(
-        0,
-        static_cast<int>(LayoutDimension::WrapContent),
-        1.0f
-    ));
-    m_input_primary->set_margin(0, 0, 12, 0);
-    form_row->add_view(m_input_primary);
-
-    m_input_secondary = EditTextBuilder::create()
-        ->hint("Secondary IP (optional)")
-        ->padding(12, 8)
-        ->build();
-    m_input_secondary->set_layout_params(LayoutParams(
-        0,
-        static_cast<int>(LayoutDimension::WrapContent),
-        1.0f
-    ));
-    m_input_secondary->set_margin(0, 0, 12, 0);
-    form_row->add_view(m_input_secondary);
-
-    auto btn_apply_custom = ButtonBuilder::create()
-        ->text("+ Apply DNS")
-        ->primary(true)
-        ->padding(14, 8)
-        ->onClick([this]() {
-            std::string primary = m_input_primary->get_text();
-            std::string secondary = m_input_secondary->get_text();
-            if (!primary.empty()) {
-                m_input_primary->set_text("");
-                m_input_secondary->set_text("");
-                if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-
-                std::thread([this, primary, secondary]() {
-                    bool ok = SecurityBackend::apply_dns(primary, secondary);
-                    if (auto engine = AppEngine::instance()) {
-                        engine->post([this, ok]() {
-                            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
-                            if (ok && m_on_changed) m_on_changed();
-                        });
-                    }
-                }).detach();
-            }
         })
         ->build();
-    btn_apply_custom->set_layout_params(LayoutParams(
+    m_spinner_provider->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::WrapContent),
-        static_cast<int>(LayoutDimension::WrapContent)
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
     ));
-    form_row->add_view(btn_apply_custom);
-    custom_col->add_view(form_row);
+    provider_row->add_view(m_spinner_provider);
+    box->add_view(provider_row);
 
-    auto custom_note = TextViewBuilder::create()
-        ->text("Overrides default DHCP resolver for active connection " + (m_info.active_connection_name.empty() ? "" : ("(" + m_info.active_connection_name + ")")))
+    box->add_view(DividerViewBuilder::create()->build());
+
+    // Row 2: Custom DNS Trigger (Popup Button)
+    auto custom_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    custom_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+    custom_row->set_padding(0, 10);
+
+    auto custom_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    custom_col->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+
+    auto custom_title = TextViewBuilder::create()->text("Custom Nameservers")->bold(true)->build();
+    m_custom_dns_lbl = TextViewBuilder::create()
+        ->text("Not configured")
         ->caption()
         ->muted()
-        ->multiline(true)
-        ->ellipsize(false)
         ->build();
-    custom_note->set_margin(0, 4, 0, 0);
-    custom_col->add_view(custom_note);
+    m_custom_dns_lbl->set_margin(0, 2, 0, 0);
 
-    m_layout->add_view(custom_col);
+    custom_col->add_view(custom_title);
+    custom_col->add_view(m_custom_dns_lbl);
+    custom_row->add_view(custom_col);
 
-    // =========================================================================
-    // 4. EDUCATIONAL "WHAT IS DNS?" (Direct Placement Callout)
-    // =========================================================================
-    auto guide_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    guide_col->set_layout_params(LayoutParams(
+    m_btn_custom_dns = ButtonBuilder::create()
+        ->text("Configure...")
+        ->flat(true)
+        ->padding(14, 6)
+        ->onClick([this]() {
+            show_custom_dns_popup(m_btn_custom_dns);
+        })
+        ->build();
+    m_btn_custom_dns->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::WrapContent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::CenterVertical
+    ));
+    custom_row->add_view(m_btn_custom_dns);
+    box->add_view(custom_row);
+
+    card->add_view(box);
+    m_layout->add_view(card);
+
+    update_custom_dns_label();
+}
+
+// =============================================================================
+// 3. CUSTOM DNS POPUP WINDOW
+// =============================================================================
+void DnsView::show_custom_dns_popup(const std::shared_ptr<View>& anchor) {
+    if (!anchor) return;
+    if (m_custom_popup && m_custom_popup->is_showing()) {
+        m_custom_popup->dismiss();
+        return;
+    }
+
+    auto popup_col = std::make_shared<LinearLayout>(Orientation::Vertical);
+    popup_col->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    guide_col->set_margin(0, 18, 0, 24);
+    popup_col->set_padding(18, 16);
 
-    auto g_title = TextViewBuilder::create()->text("💡 What is DNS?")->bold(true)->build();
-    auto g_desc = TextViewBuilder::create()
-        ->text("Translates website names into IP addresses. Encrypted resolvers shield your queries from ISP tracking and block malicious sites.")
+    auto pop_title = TextViewBuilder::create()->text("Custom DNS Nameservers")->h3()->bold(true)->build();
+    pop_title->set_margin(0, 0, 0, 4);
+    popup_col->add_view(pop_title);
+
+    auto pop_desc = TextViewBuilder::create()
+        ->text("Specify upstream DNS server addresses for your active connection.")
         ->caption()
         ->muted()
-        ->multiline(true)
-        ->ellipsize(false)
         ->build();
-    g_desc->set_margin(0, 4, 0, 0);
-    guide_col->add_view(g_title);
-    guide_col->add_view(g_desc);
-    m_layout->add_view(guide_col);
+    pop_desc->set_margin(0, 0, 0, 14);
+    popup_col->add_view(pop_desc);
 
-    set_content_view(m_layout);
+    // Primary IP
+    auto prim_lbl = TextViewBuilder::create()->text("PRIMARY IP")->caption()->bold(true)->muted()->build();
+    prim_lbl->set_margin(0, 0, 0, 4);
+    popup_col->add_view(prim_lbl);
+
+    std::string existing_p = m_info.nameservers.size() > 0 ? m_info.nameservers[0] : "";
+    std::string existing_s = m_info.nameservers.size() > 1 ? m_info.nameservers[1] : "";
+
+    auto edit_prim = EditTextBuilder::create()
+        ->hint("e.g. 1.1.1.1 or 8.8.8.8")
+        ->padding(10, 8)
+        ->build();
+    edit_prim->set_text(existing_p);
+    edit_prim->set_margin(0, 0, 0, 12);
+    popup_col->add_view(edit_prim);
+
+    // Secondary IP
+    auto sec_lbl = TextViewBuilder::create()->text("SECONDARY IP (OPTIONAL)")->caption()->bold(true)->muted()->build();
+    sec_lbl->set_margin(0, 0, 0, 4);
+    popup_col->add_view(sec_lbl);
+
+    auto edit_sec = EditTextBuilder::create()
+        ->hint("e.g. 1.0.0.1 or 8.8.4.4")
+        ->padding(10, 8)
+        ->build();
+    edit_sec->set_text(existing_s);
+    edit_sec->set_margin(0, 0, 0, 16);
+    popup_col->add_view(edit_sec);
+
+    // Actions Row
+    auto btn_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    btn_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent),
+        Gravity::End
+    ));
+
+    auto btn_cancel = ButtonBuilder::create()
+        ->text("Cancel")
+        ->flat(true)
+        ->padding(14, 8)
+        ->onClick([this]() {
+            if (m_custom_popup) m_custom_popup->dismiss();
+        })
+        ->build();
+    btn_cancel->set_margin(0, 0, 8, 0);
+
+    auto btn_apply = ButtonBuilder::create()
+        ->text("Apply DNS")
+        ->primary(true)
+        ->padding(16, 8)
+        ->onClick([this, edit_prim, edit_sec]() {
+            std::string primary = edit_prim->get_text();
+            std::string secondary = edit_sec->get_text();
+            if (primary.empty()) return;
+
+            if (m_custom_popup) m_custom_popup->dismiss();
+            if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
+
+            std::thread([this, primary, secondary]() {
+                bool ok = SecurityBackend::apply_dns(primary, secondary);
+                if (auto engine = AppEngine::instance()) {
+                    engine->post([this, ok]() {
+                        if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
+                        if (ok && m_on_changed) m_on_changed();
+                    });
+                }
+            }).detach();
+        })
+        ->build();
+
+    btn_row->add_view(btn_cancel);
+    btn_row->add_view(btn_apply);
+    popup_col->add_view(btn_row);
+
+    m_custom_popup = PopupWindowBuilder::create()
+        ->content(popup_col)
+        ->width(340)
+        ->elevation(6)
+        ->cornerRadius(12)
+        ->dismissOnOutsideClick(true)
+        ->dismissOnEscape(true)
+        ->build();
+
+    m_custom_popup->show_as_dropdown(anchor, PopupGravity::TopCenter);
+}
+
+void DnsView::update_custom_dns_label() {
+    if (!m_custom_dns_lbl) return;
+
+    if (m_info.nameservers.empty()) {
+        m_custom_dns_lbl->set_text("Not configured (using DHCP default)");
+    } else {
+        std::string s = "";
+        for (size_t i = 0; i < m_info.nameservers.size(); ++i) {
+            if (i > 0) s += ", ";
+            s += m_info.nameservers[i];
+        }
+        m_custom_dns_lbl->set_text(s);
+    }
+}
+
+void DnsView::update_status_indicator(bool encrypted) {
+    if (!m_status_dot) return;
+    m_status_dot->set_background_color(encrypted ? COLOR_ACTIVE_GREEN : COLOR_INACTIVE_GRAY);
+    m_status_dot->request_redraw();
+}
+
+int DnsView::provider_to_index(const std::string& provider_name) {
+    if (provider_name.find("AdGuard") != std::string::npos) return 1;
+    if (provider_name.find("Mullvad") != std::string::npos) return 2;
+    if (provider_name.find("Cloudflare") != std::string::npos) return 3;
+    return 0; // Quad9 default
 }
 
 void DnsView::update_info(const DnsInfo& info) {
     m_info = info;
 
+    update_status_indicator(m_info.encrypted);
+
     if (m_status_lbl) {
-        std::string title_text = m_info.encrypted ?
-            ("🌐 " + m_info.active_provider + " Protection Active") :
-            "🌐 Standard Router DNS (Unencrypted)";
-        m_status_lbl->set_text(title_text);
+        m_status_lbl->set_text(m_info.encrypted ? "DNS Protection is Active" : "DNS Protection is Disabled");
     }
 
-    if (m_status_desc) {
-        std::string desc_text = m_info.encrypted ?
-            "Encrypted DNS lookups shield web navigation from ISP surveillance and network hijacking." :
-            "DNS queries are routed unencrypted through default ISP/router nameservers.";
-        m_status_desc->set_text(desc_text);
+    if (m_subtitle_lbl) {
+        std::string sub_str = "Route and encrypt lookups via ";
+        if (m_info.encrypted) {
+            sub_str += m_info.active_provider.empty() ? "Encrypted DNS" : m_info.active_provider;
+        } else {
+            sub_str = "Using unencrypted upstream nameservers (DHCP / ISP)";
+        }
+        if (!m_info.active_connection_name.empty()) {
+            sub_str += " • " + m_info.active_connection_name;
+        }
+        m_subtitle_lbl->set_text(sub_str);
     }
 
     m_updating_ui = true;
 
-    if (m_switch_master) {
-        m_switch_master->set_checked(m_info.encrypted);
+    if (m_switch_master) m_switch_master->set_checked(m_info.encrypted);
+
+    int idx = provider_to_index(m_info.active_provider);
+    if (m_spinner_provider) {
+        m_spinner_provider->set_selected_index(idx);
     }
 
-    bool is_quad9 = m_info.active_provider.find("Quad9") != std::string::npos;
-    bool is_adguard = m_info.active_provider.find("AdGuard") != std::string::npos;
-    bool is_mullvad = m_info.active_provider.find("Mullvad") != std::string::npos;
-    bool is_cloudflare = m_info.active_provider.find("Cloudflare") != std::string::npos;
-
-    if (m_switch_quad9) m_switch_quad9->set_checked(is_quad9);
-    if (m_switch_adguard) m_switch_adguard->set_checked(is_adguard);
-    if (m_switch_mullvad) m_switch_mullvad->set_checked(is_mullvad);
-    if (m_switch_cloudflare) m_switch_cloudflare->set_checked(is_cloudflare);
+    update_custom_dns_label();
 
     m_updating_ui = false;
 }

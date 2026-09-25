@@ -15,6 +15,10 @@ public:
     void update_info(const TrafficReport& traffic);
 
 private:
+    void setup_metrics_hero();
+    void setup_filter_bar();
+    void setup_connections_section();
+    void setup_feed_section();
     void rebuild_active_connections();
     void rebuild_recent_feed();
 

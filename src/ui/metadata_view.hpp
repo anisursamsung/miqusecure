@@ -14,12 +14,17 @@ public:
     void update_info(const CleanerInfo& info);
 
 private:
+    void setup_status_hero();
+    void setup_caches_section();
+    void setup_sanitizer_section();
+    void update_status_indicator(bool ready);
     void clean_file(const std::string& path);
 
     CleanerInfo m_info;
     std::function<void()> m_on_changed;
 
     std::shared_ptr<miqu::LinearLayout> m_layout;
+    std::shared_ptr<miqu::FrameLayout> m_status_dot;
     std::shared_ptr<miqu::TextView> m_status_lbl;
     std::shared_ptr<miqu::TextView> m_status_badge;
     std::shared_ptr<miqu::ProgressBar> m_progress_bar;
